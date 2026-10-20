@@ -26,6 +26,7 @@ import {
   SessionState,
   SessionSwitch,
 } from './session.js';
+import { FuelCall, StatusPosition, StatusUpdate } from './status.js';
 
 /**
  * Every message type this version knows. New message types are added here –
@@ -48,6 +49,10 @@ export const Message = z.discriminatedUnion('type', [
   SessionSwitch,
   SessionLeave,
   SessionClosed,
+  // Status packages and fuel calls (§6)
+  StatusUpdate,
+  StatusPosition,
+  FuelCall,
   // Flights (§7)
   FlightCreate,
   FlightCreated,

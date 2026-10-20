@@ -76,5 +76,28 @@ export {
   PrivateFlightCode,
 } from './flights.js';
 
+export {
+  Armament,
+  ExportAvailability,
+  Fuel,
+  FuelCall,
+  HeadingTrue,
+  headingDifference,
+  isStale,
+  Position,
+  SendReason,
+  SpeedMs,
+  STATUS_TIMING,
+  StatusPosition,
+  statusSendReason,
+  StatusUpdate,
+  Store,
+  ValueSource,
+  WeaponKind,
+  weaponsCount,
+  WeaponStation,
+} from './status.js';
+export type { StatusBody, StatusSample } from './status.js';
+
 export { Message, parseMessage, parseMessageText } from './messages.js';
 export type { MessageTypeName, ParseFailureCode, ParseResult } from './messages.js';
