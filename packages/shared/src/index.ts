@@ -99,5 +99,33 @@ export {
 } from './status.js';
 export type { StatusBody, StatusSample } from './status.js';
 
+export {
+  Command,
+  CommandMessage,
+  CommandResult,
+  HostToScreen,
+  parseHostMessage,
+  parseScreenMessage,
+  reconnectDelayMs,
+  RELAY_COMMANDS,
+  RelayAddress,
+  ScreenToHost,
+  SLICE_NAMES,
+  SliceChanges,
+  SliceName,
+  Slices,
+  StateResync,
+  StateSnapshot,
+  StateUpdate,
+  TimeDisplay,
+  UI_ERROR_CODES,
+  UI_TIMING,
+  UI_WEBSOCKET_PATH,
+  UiErrorCode,
+  UiScale,
+  updateAction,
+} from './ui.js';
+export type { CommandName, HostParseResult, ScreenParseResult } from './ui.js';
+
 export { Message, parseMessage, parseMessageText } from './messages.js';
 export type { MessageTypeName, ParseFailureCode, ParseResult } from './messages.js';
