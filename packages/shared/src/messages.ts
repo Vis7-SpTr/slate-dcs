@@ -5,6 +5,17 @@ import { z } from 'zod';
 
 import { ErrorMessage, Hello, MsgReceived, Reject, RelayReceipt, Welcome } from './control.js';
 import { EnvelopeBase } from './envelope.js';
+import {
+  FlightClosed,
+  FlightCreate,
+  FlightCreated,
+  FlightJoin,
+  FlightLeave,
+  FlightListed,
+  FlightMove,
+  FlightMoveUp,
+  FlightUpdated,
+} from './flights.js';
 import { PROTOCOL_VERSION } from './protocol.js';
 import {
   SessionClosed,
@@ -37,6 +48,16 @@ export const Message = z.discriminatedUnion('type', [
   SessionSwitch,
   SessionLeave,
   SessionClosed,
+  // Flights (§7)
+  FlightCreate,
+  FlightCreated,
+  FlightJoin,
+  FlightLeave,
+  FlightMove,
+  FlightMoveUp,
+  FlightUpdated,
+  FlightListed,
+  FlightClosed,
 ]);
 export type Message = z.infer<typeof Message>;
 export type MessageTypeName = Message['type'];

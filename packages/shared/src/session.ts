@@ -3,13 +3,23 @@
 
 import { z } from 'zod';
 
+import {
+  AircraftInfo,
+  AircraftType,
+  Coalition,
+  CROCKFORD,
+  Nick,
+  Pid,
+  Presence,
+  readCrockford,
+  RoleId,
+  Seq,
+} from './common.js';
 import { defineMessage } from './envelope.js';
+import { Flight, FlightSummary } from './flights.js';
 
 // ---------------------------------------------------------------------------
-// Building blocks
-
-/** Crockford base32 alphabet (no I, L, O, U). */
-const CROCKFORD = '0-9A-HJKMNP-TV-Z';
+// Building blocks (shared ones live in common.ts)
 
 /**
  * Session code as sent on the wire: a prefix and 8 Crockford base32 characters,
@@ -21,13 +31,6 @@ export const SessionCode = z
   .regex(new RegExp(`^[A-Z]+-[${CROCKFORD}]{8}$`), 'Expected a session code like BLUE-7K3Q9XPM');
 export type SessionCode = z.infer<typeof SessionCode>;
 
-/** Coalition of a session. */
-export const Coalition = z.enum(['blue', 'red']);
-export type Coalition = z.infer<typeof Coalition>;
-
-/** Participant ID, issued by the relay; stable across reconnects (§0). */
-export const Pid = z.string().min(1).max(64);
-
 /**
  * Token: 256-bit random value, base64url without padding = 43 characters (§0).
  * **Secret** – only the player's own host and the relay ever see it.
@@ -35,35 +38,6 @@ export const Pid = z.string().min(1).max(64);
 export const Token = z
   .string()
   .regex(/^[A-Za-z0-9_-]{43}$/, 'Expected a 256-bit base64url token (43 characters)');
-
-/** Role ID from the role list – `pilot`, `jtac`; roles are data (scope §3.4). */
-export const RoleId = z
-  .string()
-  .regex(/^[a-z][a-zA-Z0-9]*$/, 'Expected a role ID like "pilot" or "jtac"');
-
-/** Display name; shown to others, never used to identify a player. */
-export const Nick = z.string().trim().min(1).max(32);
-
-/** Connection state of a participant (§5). */
-export const Presence = z.enum(['online', 'lost', 'left']);
-export type Presence = z.infer<typeof Presence>;
-
-/**
- * Own aircraft or JTAC slot as far as known – from the client hook, or entered
- * by hand (§4.2). `null` while no slot is taken.
- */
-export const AircraftInfo = z.object({
-  /** DCS unit type, e.g. `FA-18C_hornet`, `forward_observer`. */
-  type: z.string().min(1),
-  /** Unit name, e.g. `Enfield 1-1`. */
-  unit: z.string().min(1).optional(),
-  /** DCS slot ID. */
-  slot: z.string().min(1).optional(),
-});
-export type AircraftInfo = z.infer<typeof AircraftInfo>;
-
-/** Sequence number assigned by the relay. */
-const Seq = z.int().nonnegative();
 
 // ---------------------------------------------------------------------------
 // §4 Joining
@@ -110,7 +84,7 @@ export const Participant = z.object({
   nick: Nick,
   role: RoleId,
   /** Only the type is shared with the whole session. */
-  aircraft: AircraftInfo.pick({ type: true }).nullable(),
+  aircraft: AircraftType.nullable(),
   presence: Presence,
 });
 export type Participant = z.infer<typeof Participant>;
@@ -119,9 +93,9 @@ export type Participant = z.infer<typeof Participant>;
  * `session.state` (relay → host, right after `session.joined`): a full snapshot;
  * afterwards only changes are sent (§4.5).
  *
- * Flights (§7), AOs (§8), check-ins (§9), missions (§10) and the flight plan
- * (§11) are accepted as-is for now and get their own schemas with their message
- * families – flights later in P1.1, the rest in P2/P3.
+ * AOs (§8), check-ins (§9), missions (§10) and the flight plan (§11) are
+ * accepted as-is for now and get their own schemas with their message families
+ * in P2/P3.
  */
 export const SessionState = defineMessage(
   'session.state',
@@ -129,10 +103,11 @@ export const SessionState = defineMessage(
     /** The snapshot reflects every message up to this `seq`. */
     asOfSeq: Seq,
     participants: z.array(Participant),
-    flights: z.array(z.unknown()),
+    /** Open flights as summaries, plus the player's own flight in full (§4.5). */
+    flights: z.array(z.union([Flight, FlightSummary])),
     aos: z.array(z.unknown()),
     you: z.object({
-      flight: z.unknown().nullable(),
+      flight: Flight.nullable(),
       checkIns: z.array(z.unknown()),
       openMissions: z.array(z.unknown()),
       flightPlan: z.unknown().nullable().optional(),
@@ -184,7 +159,7 @@ export function normalizeSessionCode(input: string): string | null {
   const match = /^([A-Z]+)-?([0-9A-Z]{8})$/.exec(compact);
   if (!match) return null;
   const [, prefix = '', rawCode = ''] = match;
-  const code = rawCode.replace(/O/g, '0').replace(/[IL]/g, '1');
+  const code = readCrockford(rawCode);
   const result = `${prefix}-${code}`;
   return SessionCode.safeParse(result).success ? result : null;
 }

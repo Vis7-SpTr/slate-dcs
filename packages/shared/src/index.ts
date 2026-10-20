@@ -27,14 +27,20 @@ export type { ErrorCode } from './control.js';
 
 export {
   AircraftInfo,
-  CLOSE_REASONS,
+  AircraftType,
   Coalition,
+  EpochMs,
   Nick,
-  normalizeSessionCode,
-  Participant,
   Pid,
   Presence,
   RoleId,
+  Seq,
+} from './common.js';
+
+export {
+  CLOSE_REASONS,
+  normalizeSessionCode,
+  Participant,
   SessionClosed,
   SessionCode,
   SessionJoin,
@@ -46,6 +52,29 @@ export {
   Token,
 } from './session.js';
 export type { CloseReason } from './session.js';
+
+export {
+  Flight,
+  FLIGHT_RULES,
+  FlightClosed,
+  FlightCreate,
+  FlightCreated,
+  FlightId,
+  FlightJoin,
+  FlightLeave,
+  FlightListed,
+  FlightMember,
+  FlightMove,
+  FlightMoveUp,
+  FlightName,
+  flightNameKey,
+  FlightPosition,
+  FlightSummary,
+  FlightUpdated,
+  LeadReserved,
+  normalizeFlightCode,
+  PrivateFlightCode,
+} from './flights.js';
 
 export { Message, parseMessage, parseMessageText } from './messages.js';
 export type { MessageTypeName, ParseFailureCode, ParseResult } from './messages.js';

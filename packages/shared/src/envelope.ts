@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 
+import { CROCKFORD, EpochMs } from './common.js';
 import { PROTOCOL_VERSION } from './protocol.js';
 
 /**
@@ -11,7 +12,7 @@ import { PROTOCOL_VERSION } from './protocol.js';
  */
 export const MessageId = z
   .string()
-  .regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, 'Expected a ULID (26 characters, Crockford base32)');
+  .regex(new RegExp(`^[${CROCKFORD}]{26}$`), 'Expected a ULID (26 characters, Crockford base32)');
 export type MessageId = z.infer<typeof MessageId>;
 
 /**
@@ -21,9 +22,6 @@ export type MessageId = z.infer<typeof MessageId>;
 export const MessageType = z
   .string()
   .regex(/^[a-z][a-zA-Z]*(\.[a-z][a-zA-Z]*)*$/, 'Expected a message type like "session.join"');
-
-/** Epoch milliseconds, UTC (protocol.md §0). */
-export const EpochMs = z.int().nonnegative();
 
 /** Addressing: who a message goes to (protocol.md §1.1). The relay enforces visibility. */
 export const Address = z.discriminatedUnion('scope', [
