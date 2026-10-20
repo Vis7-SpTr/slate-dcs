@@ -3,7 +3,7 @@
 // GPL-3.0-compatible licence (architecture.md §1.4).
 // Usage: pnpm check:licenses   (run after pnpm install)
 
-import { execFileSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 
 /** SPDX identifiers accepted for dependencies. Extend only after checking GPL-3.0 compatibility. */
 const ALLOWED = new Set([
@@ -39,11 +39,9 @@ function isAllowed(expression) {
 }
 
 function list(kind) {
-  // On Windows, pnpm is a .cmd shim and needs a shell to run.
-  const out = execFileSync('pnpm', ['licenses', 'list', '--json', '-r', kind], {
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-  });
+  // One fixed command string (no user input), run through the shell so it
+  // works with every pnpm install type on Windows and Linux.
+  const out = execSync(`pnpm licenses list --json -r ${kind}`, { encoding: 'utf8' });
   return JSON.parse(out.trim() || '{}');
 }
 
