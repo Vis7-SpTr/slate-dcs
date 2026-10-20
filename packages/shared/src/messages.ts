@@ -6,18 +6,37 @@ import { z } from 'zod';
 import { ErrorMessage, Hello, MsgReceived, Reject, RelayReceipt, Welcome } from './control.js';
 import { EnvelopeBase } from './envelope.js';
 import { PROTOCOL_VERSION } from './protocol.js';
+import {
+  SessionClosed,
+  SessionJoin,
+  SessionJoined,
+  SessionLeave,
+  SessionPresence,
+  SessionState,
+  SessionSwitch,
+} from './session.js';
 
 /**
  * Every message type this version knows. New message types are added here –
  * the compiler then flags every `switch (message.type)` that misses one.
  */
 export const Message = z.discriminatedUnion('type', [
+  // Confirmations and errors (§1.2, §1.3)
   RelayReceipt,
   MsgReceived,
   ErrorMessage,
+  // Version handshake (§3)
   Hello,
   Welcome,
   Reject,
+  // Session (§4, §5)
+  SessionJoin,
+  SessionJoined,
+  SessionState,
+  SessionPresence,
+  SessionSwitch,
+  SessionLeave,
+  SessionClosed,
 ]);
 export type Message = z.infer<typeof Message>;
 export type MessageTypeName = Message['type'];

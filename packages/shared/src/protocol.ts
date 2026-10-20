@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Protocol constants. Message schemas follow in P1.1.
+// Protocol constants (protocol.md §0, §4, §5).
 
 /** Protocol major version. Host and relay must agree on it (`hello` / `welcome`). */
 export const PROTOCOL_VERSION = 1;
@@ -15,3 +15,13 @@ export const DEFAULT_PORTS = {
 } as const;
 
 export type PortName = keyof typeof DEFAULT_PORTS;
+
+/** Timing rules of the session layer. */
+export const SESSION_TIMING = {
+  /** WebSocket ping/pong interval; the relay sends it as `welcome.heartbeatSec` (§5). */
+  heartbeatSec: 15,
+  /** A participant is `lost` after this long without a pong; his state is kept (§5). */
+  lostAfterSec: 45,
+  /** Relay entries (token, flight position, …) expire this long after last seen (§4.3). */
+  tokenExpiryHours: 4,
+} as const;
