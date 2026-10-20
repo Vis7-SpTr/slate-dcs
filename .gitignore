@@ -1,0 +1,29 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local settings and secrets
+.env
+.env.*
+!.env.example
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Safety net: DCS-derived files never go into the repo (architecture.md §1.4).
+# DTC sample exports contain ED threat tables; spike logs come from real sessions.
+*.dtc
+*.jsonl
+*.miz
+*.trk
