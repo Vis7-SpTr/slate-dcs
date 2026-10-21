@@ -1,0 +1,27 @@
+{
+  "name": "@slate-dcs/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SLATE web UI: one window with anchored areas, for OKB, desktop browsers and paired devices",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:demo": "vite",
+    "build": "vite build",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.node.json"
+  },
+  "dependencies": {
+    "@fontsource/b612": "^5.3.0",
+    "@fontsource/b612-mono": "^5.3.0",
+    "@slate-dcs/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/node": "^24.19.2",
+    "svelte": "^5.57.2",
+    "svelte-check": "^4.7.7",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4"
+  }
+}

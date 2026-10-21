@@ -3,6 +3,7 @@
 
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
+import svelte from 'eslint-plugin-svelte';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -36,6 +37,38 @@ export default tseslint.config(
     },
   },
 
+  // Build configs outside the app's tsconfig: no type-aware rules.
+  {
+    files: ['apps/web/vite.config.ts'],
+    extends: [tseslint.configs.disableTypeChecked],
+  },
+
+  // Svelte components: Svelte's rules plus TypeScript in <script lang="ts">.
+  // Types in .svelte files are checked by svelte-check (`pnpm typecheck`).
+  ...svelte.configs.recommended,
+  {
+    // Rune modules (*.svelte.ts) are TypeScript: keep the type-aware rules.
+    files: ['**/*.svelte.ts'],
+    languageOptions: {
+      parserOptions: {
+        parser: tseslint.parser,
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ['**/*.svelte'],
+    extends: [tseslint.configs.recommended],
+    languageOptions: {
+      globals: { ...globals.browser, __SLATE_BUILD__: 'readonly' },
+      parserOptions: {
+        parser: tseslint.parser,
+        extraFileExtensions: ['.svelte'],
+      },
+    },
+  },
+
   // Plain JS (config files, tools): Node globals, no type-aware rules.
   {
     files: ['**/*.js', '**/*.mjs'],
@@ -46,4 +79,5 @@ export default tseslint.config(
 
   // Must stay last: turns off rules that clash with Prettier.
   prettier,
+  ...svelte.configs.prettier,
 );

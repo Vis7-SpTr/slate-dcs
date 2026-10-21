@@ -1,0 +1,28 @@
+{
+  "name": "@slate-dcs/host",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SLATE host: local service that owns all state and serves the UI",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "dev:demo": "tsx watch src/main.ts --demo",
+    "start": "tsx src/main.ts",
+    "start:demo": "tsx src/main.ts --demo",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.6",
+    "@fastify/websocket": "^11.3.4",
+    "@slate-dcs/shared": "workspace:*",
+    "fastify": "^5.12.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15",
+    "ws": "^8.22.0"
+  }
+}

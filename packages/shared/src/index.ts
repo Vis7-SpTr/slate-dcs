@@ -117,15 +117,37 @@ export {
   StateResync,
   StateSnapshot,
   StateUpdate,
-  TimeDisplay,
   UI_ERROR_CODES,
   UI_TIMING,
   UI_WEBSOCKET_PATH,
   UiErrorCode,
-  UiScale,
   updateAction,
 } from './ui.js';
 export type { CommandName, HostParseResult, ScreenParseResult } from './ui.js';
 
+export {
+  defaultSlices,
+  FlightSlice,
+  HostSlice,
+  MissionSlice,
+  OwnshipOverrides,
+  OwnshipSlice,
+  SessionSlice,
+  SettingsSlice,
+  SLICE_SCHEMAS,
+  TimeDisplay,
+  TrafficSlice,
+  UiScale,
+} from './slices.js';
+
 export { Message, parseMessage, parseMessageText } from './messages.js';
 export type { MessageTypeName, ParseFailureCode, ParseResult } from './messages.js';
+
+export {
+  formatTimeOfDay,
+  localTimeOfDay,
+  MAP_UTC_OFFSET_HOURS,
+  mapUtcOffsetHours,
+  zuluTimeOfDay,
+} from './maps.js';
+export { ulid } from './ulid.js';

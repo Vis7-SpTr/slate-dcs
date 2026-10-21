@@ -32,6 +32,10 @@ Requirements: Node.js 24 LTS or newer, pnpm (version pinned in `package.json`), 
 
 ```powershell
 pnpm install          # install dependencies
+pnpm start            # build the UI and start SLATE on http://127.0.0.1:7792 (use this URL in OKB)
+pnpm start:demo       # the same with demo data (a running mission and an F/A-18C)
+pnpm dev              # development: host + UI with hot reload on http://127.0.0.1:5173
+pnpm dev:demo         # development with demo data
 pnpm check            # everything CI runs: format, lint, typecheck, test, SPDX + licence checks
 pnpm test:watch       # tests in watch mode
 pnpm format           # format all files with Prettier

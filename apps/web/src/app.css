@@ -1,0 +1,72 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Global tokens and base styles (ui-design.md §1). Component styles live in
+   the components. Every size is in rem, so the UI scale setting (which sets
+   --ui-scale on <html>) scales the whole UI evenly. */
+
+:root {
+  --ui-scale: 1;
+  font-size: calc(16px * var(--ui-scale));
+  color-scheme: dark;
+
+  /* Surfaces – dark by default, no pure white anywhere. */
+  --bg: #0e1216;
+  --surface: #151a20;
+  --surface-2: #1c232b;
+  --surface-3: #26303a;
+  --line: #2e3945;
+  --text: #dde2e7;
+  --text-dim: #8d99a6;
+  --text-faint: #5f6b77;
+
+  /* Colour always means something and is paired with a word or shape. */
+  --red: #ff5f5f; /* abort, threat, not cleared */
+  --amber: #f3b23c; /* needs your action, stale, changed */
+  --green: #4cc97f; /* cleared, acknowledged, complete, live */
+  --blue: #58a6ff; /* friendly, own side, selected */
+  --blue-bg: #17324f;
+
+  --radius: 0.5rem;
+  /* Smallest click target: 48 px at scale 1 – tablet pointing in VR is imprecise. */
+  --touch: 3rem;
+
+  --font: 'B612', system-ui, sans-serif;
+  --mono: 'B612 Mono', ui-monospace, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  touch-action: manipulation;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+/* Codes, coordinates, times: monospaced, tabular figures, slashed zero. */
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+}

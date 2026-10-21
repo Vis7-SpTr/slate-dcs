@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { defaultSlices, SLICE_SCHEMAS } from './slices.js';
 import { ID_1 } from './test-helpers.js';
 import {
   Command,
@@ -19,30 +20,32 @@ import {
   updateAction,
 } from './ui.js';
 
-const slices = Object.fromEntries(SLICE_NAMES.map((name) => [name, null]));
+const slices = defaultSlices('0.1.0+3f2c1ab');
 const snapshot = { t: 'state.snapshot', seq: 0, body: { build: '0.1.0+3f2c1ab', slices } };
 const cmd = (name: string, args: unknown) => ({ t: 'cmd', id: ID_1, body: { cmd: name, args } });
+const localSettings = { timeDisplay: 'local', uiScale: 1.25 };
 
 describe('state.snapshot', () => {
-  it('accepts a snapshot with every slice', () => {
+  it('accepts the state of a host that just started', () => {
     expect(StateSnapshot.safeParse(snapshot).success).toBe(true);
   });
 
-  it('accepts any JSON as slice contents (schemas follow in P1.4)', () => {
-    const withContent = {
-      ...snapshot,
-      body: { ...snapshot.body, slices: { ...slices, settings: { timeDisplay: 'zulu' } } },
-    };
-    expect(StateSnapshot.safeParse(withContent).success).toBe(true);
+  it('has a schema for every slice name', () => {
+    expect(Object.keys(SLICE_SCHEMAS).sort()).toEqual([...SLICE_NAMES].sort());
   });
 
   it.each(SLICE_NAMES)('rejects a snapshot without the "%s" slice', (name) => {
-    const incomplete = Object.fromEntries(
-      SLICE_NAMES.filter((n) => n !== name).map((n) => [n, null]),
-    );
+    const incomplete = Object.fromEntries(Object.entries(slices).filter(([n]) => n !== name));
     expect(
       StateSnapshot.safeParse({ ...snapshot, body: { ...snapshot.body, slices: incomplete } })
         .success,
+    ).toBe(false);
+  });
+
+  it('rejects a slice with broken contents', () => {
+    const broken = { ...slices, settings: { timeDisplay: 'pc', uiScale: 1 } };
+    expect(
+      StateSnapshot.safeParse({ ...snapshot, body: { ...snapshot.body, slices: broken } }).success,
     ).toBe(false);
   });
 
@@ -57,12 +60,16 @@ describe('state.snapshot', () => {
 
 describe('state.update', () => {
   it('accepts an update of one slice', () => {
-    const update = { t: 'state.update', seq: 1, body: { slices: { flight: { flightId: 'f_1' } } } };
+    const update = { t: 'state.update', seq: 1, body: { slices: { settings: localSettings } } };
     expect(StateUpdate.safeParse(update).success).toBe(true);
   });
 
   it('accepts an update of several slices at once (one event, one update)', () => {
-    const update = { t: 'state.update', seq: 7, body: { slices: { flight: null, session: {} } } };
+    const update = {
+      t: 'state.update',
+      seq: 7,
+      body: { slices: { flight: slices.flight, session: slices.session } },
+    };
     expect(StateUpdate.safeParse(update).success).toBe(true);
   });
 
@@ -72,8 +79,13 @@ describe('state.update', () => {
     );
   });
 
+  it('rejects an update with broken slice contents', () => {
+    const update = { t: 'state.update', seq: 1, body: { slices: { flight: { own: 'x' } } } };
+    expect(StateUpdate.safeParse(update).success).toBe(false);
+  });
+
   it('rejects an update with seq 0 (only a snapshot can carry 0)', () => {
-    const update = { t: 'state.update', seq: 0, body: { slices: { flight: null } } };
+    const update = { t: 'state.update', seq: 0, body: { slices: { settings: localSettings } } };
     expect(StateUpdate.safeParse(update).success).toBe(false);
   });
 
@@ -81,9 +93,9 @@ describe('state.update', () => {
     const result = StateUpdate.safeParse({
       t: 'state.update',
       seq: 2,
-      body: { slices: { flight: null, somethingNew: 1 } },
+      body: { slices: { settings: localSettings, somethingNew: 1 } },
     });
-    expect(result.success && Object.keys(result.data.body.slices)).toEqual(['flight']);
+    expect(result.success && Object.keys(result.data.body.slices)).toEqual(['settings']);
   });
 });
 

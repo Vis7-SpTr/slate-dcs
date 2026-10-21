@@ -1,6 +1,6 @@
 {
   "name": "slate-dcs",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "SLATE – EFB and JTAC/CAS coordination for DCS World",
   "license": "GPL-3.0-or-later",
@@ -10,6 +10,11 @@
     "node": ">=24"
   },
   "scripts": {
+    "dev": "pnpm --parallel --filter @slate-dcs/host --filter @slate-dcs/web run dev",
+    "dev:demo": "pnpm --parallel --filter @slate-dcs/host --filter @slate-dcs/web run dev:demo",
+    "build": "pnpm --filter @slate-dcs/web build",
+    "start": "pnpm build && pnpm --filter @slate-dcs/host start",
+    "start:demo": "pnpm build && pnpm --filter @slate-dcs/host start:demo",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json && pnpm -r --if-present typecheck",
     "test": "vitest run",
@@ -25,8 +30,12 @@
     "@types/node": "^24.19.2",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.23.1",
     "globals": "^17.13.0",
     "prettier": "^3.9.10",
+    "prettier-plugin-svelte": "^4.1.1",
+    "svelte": "^5.57.2",
+    "svelte-eslint-parser": "^1.9.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.0",
     "vite": "^8.3.4",

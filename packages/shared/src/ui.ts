@@ -8,6 +8,7 @@ import { Coalition, Nick, RoleId } from './common.js';
 import { MessageId } from './envelope.js';
 import { FlightCreate, FlightJoin, FlightMove } from './flights.js';
 import { SessionCode } from './session.js';
+import { SLICE_SCHEMAS, TimeDisplay, UiScale } from './slices.js';
 import { Fuel, Position, WeaponStation } from './status.js';
 
 // ---------------------------------------------------------------------------
@@ -33,23 +34,20 @@ export const UI_WEBSOCKET_PATH = '/ws';
 // State slices (§14.3)
 
 /** Names of the host's state slices. */
-export const SLICE_NAMES = ['host', 'session', 'flight', 'ownship', 'traffic', 'settings'] as const;
+export const SLICE_NAMES = [
+  'host',
+  'session',
+  'flight',
+  'ownship',
+  'traffic',
+  'mission',
+  'settings',
+] as const;
 export const SliceName = z.enum(SLICE_NAMES);
 export type SliceName = z.infer<typeof SliceName>;
 
-/**
- * Contents of one slice. Any JSON value for now – each slice gets its own
- * schema with the host's state store in P1.4.
- */
-const SliceValue = z.json();
-
-/** All slices – a snapshot must contain every one of them. */
-export const Slices = z.object(
-  Object.fromEntries(SLICE_NAMES.map((name) => [name, SliceValue])) as Record<
-    SliceName,
-    typeof SliceValue
-  >,
-);
+/** All slices with their contents (slices.ts) – a snapshot must contain every one. */
+export const Slices = z.object(SLICE_SCHEMAS);
 export type Slices = z.infer<typeof Slices>;
 
 /** Some slices – an update replaces at least one. */
@@ -74,15 +72,6 @@ const command = <const C extends string, A extends z.ZodType>(cmd: C, args: A) =
   z.object({ cmd: z.literal(cmd), args });
 
 const Empty = z.object({});
-
-/** Time display in the status strip and everywhere else (scope §4.6, mission clock). */
-export const TimeDisplay = z.enum(['zulu', 'local']);
-
-/**
- * UI scale factor (ui-design.md §2). The range is a starting point; the default
- * and minimum window size are set after the first OKB tests (ui-design.md §10).
- */
-export const UiScale = z.number().min(0.5).max(3);
 
 /** Every command a screen can send in P1. */
 export const Command = z.discriminatedUnion('cmd', [

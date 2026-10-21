@@ -30,6 +30,14 @@ const ALLOWED = new Set([
   'Zlib',
 ]);
 
+/**
+ * Fonts may also be under the SIL Open Font License. They ship as separate font
+ * files next to the code (aggregation, not a combined work), so this is fine
+ * for font packages – and only for them (architecture.md §1.4).
+ */
+const FONT_PACKAGE = /^@fontsource\//;
+const FONT_LICENCES = new Set(['OFL-1.1']);
+
 /** Accepts simple SPDX expressions: "A", "(A OR B)", "A AND B". */
 function isAllowed(expression) {
   const expr = expression.replace(/[()]/g, ' ').trim();
@@ -51,7 +59,10 @@ for (const kind of ['--prod', '--dev']) {
   for (const [license, packages] of Object.entries(list(kind))) {
     for (const pkg of packages) {
       count += 1;
-      if (!isAllowed(license)) bad.push(`${pkg.name}@${pkg.versions.join(', ')}: ${license}`);
+      const fontOk = FONT_PACKAGE.test(pkg.name) && FONT_LICENCES.has(license);
+      if (!fontOk && !isAllowed(license)) {
+        bad.push(`${pkg.name}@${pkg.versions.join(', ')}: ${license}`);
+      }
     }
   }
 }
