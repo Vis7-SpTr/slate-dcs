@@ -68,10 +68,18 @@
           }}>{t('strip.dcsRepair')}</button
         >
       {/if}
-      <span class="link" data-state={relay}>
+      <!-- Tap: More → Session (join, host mode). -->
+      <button
+        type="button"
+        class="link link-button"
+        data-state={relay}
+        onclick={() => {
+          router.go('more', 'session');
+        }}
+      >
         <span class="dot" aria-hidden="true"></span>{t('strip.relay')}
         <span class="word">{t(`link.relay.${relay}`)}</span>
-      </span>
+      </button>
     </div>
 
     <div class="item">
@@ -145,6 +153,14 @@
     gap: 0.35rem;
     font-size: 0.875rem;
     color: var(--text-dim);
+  }
+
+  .link-button {
+    min-height: 2rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
   }
 
   .link .word {

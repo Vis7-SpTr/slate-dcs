@@ -270,6 +270,7 @@ export class Relay {
         this.#join(conn, message);
         return;
       case 'session.switch':
+      case 'session.update':
       case 'session.leave':
       case 'status.update':
       case 'flight.create':
@@ -283,6 +284,7 @@ export class Relay {
           return;
         }
         if (message.type === 'session.switch') this.#switch(member, message);
+        else if (message.type === 'session.update') this.#update(member, message);
         else if (message.type === 'session.leave') this.#leave(conn, member);
         else if (message.type === 'status.update') this.#status(member, message);
         else this.#flightCommand(member, message);
@@ -304,6 +306,7 @@ export class Relay {
       case 'session.joined':
       case 'session.state':
       case 'session.presence':
+      case 'session.updated':
       case 'session.closed':
       case 'status.position':
       case 'flight.created':
@@ -484,6 +487,43 @@ export class Relay {
     this.#sendState(member, null);
     this.#setPresence(member, 'online');
     this.#log?.info(`${this.#who(member)} switched to ${member.session}`);
+  }
+
+  /** New nick, role or aircraft while joined (§5): tells the session, and his flight. */
+  #update(member: Member, message: Extract<Message, { type: 'session.update' }>): void {
+    const body = message.body;
+    const typeChanged = member.aircraft?.type !== body.aircraft?.type;
+    member.nick = body.nick;
+    member.role = body.role;
+    member.aircraft = body.aircraft;
+    this.#publish(
+      this.#sessions[member.session],
+      {
+        type: 'session.updated',
+        from: RELAY_FROM,
+        session: member.session,
+        to: { scope: 'session' },
+        body: {
+          pid: member.pid,
+          nick: member.nick,
+          role: member.role,
+          aircraft: member.aircraft ? { type: member.aircraft.type } : null,
+        },
+        re: message.id,
+      },
+      this.#inSession(member.session).filter((m) => m !== member),
+      true,
+    );
+    const flight = member.flight;
+    if (!flight) return;
+    // Joining a JTAC slot leaves the flight (decided 21 Oct 2026).
+    if (member.role === 'jtac') {
+      this.#removeFromFlight(member, message.id, true);
+      this.#log?.info(`${this.#who(member)} took a JTAC slot and left ${this.#display(flight)}`);
+    } else if (typeChanged) {
+      this.#flightChanged(flight, message.id);
+      this.#listed(flight);
+    }
   }
 
   #leave(conn: Conn, member: Member): void {
@@ -730,10 +770,12 @@ export class Relay {
       fail('forbidden', 'Not your own position, and never to or from -1');
       return;
     }
-    if (fromPos === body.pos) return;
-    flight.slots.delete(fromPos);
-    if (occupant) flight.slots.set(fromPos, occupant);
-    flight.slots.set(body.pos, mover);
+    // A move to his own position changes nothing, but still gets its answer.
+    if (fromPos !== body.pos) {
+      flight.slots.delete(fromPos);
+      if (occupant) flight.slots.set(fromPos, occupant);
+      flight.slots.set(body.pos, mover);
+    }
     this.#flightChanged(flight, re);
   }
 

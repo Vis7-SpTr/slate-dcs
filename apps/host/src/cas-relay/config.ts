@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// The relay's files in its data folder (architecture.md §1.2: "one config file
+// for port, TLS and session secrets"): relay.json, cert.pem, key.pem. Missing
+// files are created – random codes, a new certificate – and then kept, so the
+// codes and the fingerprint stay the same across restarts.
+
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { networkInterfaces } from 'node:os';
+import { join } from 'node:path';
+
+import { DEFAULT_PORTS } from '@slate-dcs/shared';
+import { z } from 'zod';
+
+import { codesValid, generateCodes } from './codes.js';
+import type { RelayCodes } from './codes.js';
+import { certificateDer, createCertificate, fingerprint } from './tls.js';
+
+const ConfigFile = z.object({
+  /** TCP port of the relay – the one port forwarded on the router (protocol.md §0). */
+  port: z.int().min(1).max(65535),
+  /** Session codes (protocol.md §4.1); change them here to lock out old ones. */
+  codes: z.object({ blue: z.string(), red: z.string(), group: z.string() }),
+  /** Public address for the discovery line (DynDNS hostname), if any (P1.7). */
+  publicAddress: z.string().min(1).nullable(),
+});
+
+export interface RelayFiles {
+  dir: string;
+  port: number;
+  codes: RelayCodes;
+  publicAddress: string | null;
+  certPem: string;
+  keyPem: string;
+  fingerprint: string;
+  /** Files created on this start, for the log. */
+  created: string[];
+}
+
+async function readText(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function writeNew(path: string, text: string): Promise<void> {
+  const temp = `${path}.slate-tmp`;
+  await writeFile(temp, text, { mode: 0o600 });
+  await rename(temp, path);
+}
+
+/** Reads the relay's files from `dir`, creating what's missing. */
+export async function loadRelayFiles(dir: string): Promise<RelayFiles> {
+  await mkdir(dir, { recursive: true });
+  const created: string[] = [];
+
+  const configPath = join(dir, 'relay.json');
+  const configText = await readText(configPath);
+  let config: z.infer<typeof ConfigFile>;
+  if (configText === null) {
+    config = { port: DEFAULT_PORTS.relay, codes: generateCodes(), publicAddress: null };
+    await writeNew(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    created.push('relay.json');
+  } else {
+    const parsed = ConfigFile.safeParse(JSON.parse(configText));
+    if (!parsed.success) throw new Error(`${configPath}: ${z.prettifyError(parsed.error)}`);
+    config = parsed.data;
+  }
+  if (!codesValid(config.codes)) {
+    throw new Error(
+      `${configPath}: the three codes must be different and look like BLUE-7K3Q9XPM (8 characters, no I, L, O, U)`,
+    );
+  }
+
+  const certPath = join(dir, 'cert.pem');
+  const keyPath = join(dir, 'key.pem');
+  let certPem = await readText(certPath);
+  let keyPem = await readText(keyPath);
+  if (certPem === null || keyPem === null) {
+    ({ certPem, keyPem } = await createCertificate());
+    await writeNew(keyPath, keyPem);
+    await writeNew(certPath, certPem);
+    created.push('cert.pem', 'key.pem');
+  }
+
+  return {
+    dir,
+    port: config.port,
+    codes: config.codes,
+    publicAddress: config.publicAddress,
+    certPem,
+    keyPem,
+    fingerprint: fingerprint(certificateDer(certPem)),
+    created,
+  };
+}
+
+/** This PC's LAN IPv4 addresses with the port, e.g. `192.168.1.20:7790`. */
+export function lanAddresses(port: number): string[] {
+  return Object.values(networkInterfaces())
+    .flatMap((list) => list ?? [])
+    .filter((a) => a.family === 'IPv4' && !a.internal)
+    .map((a) => `${a.address}:${String(port)}`);
+}

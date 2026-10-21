@@ -41,6 +41,7 @@ export {
   CLOSE_REASONS,
   normalizeSessionCode,
   Participant,
+  RelayFingerprint,
   SessionClosed,
   SessionCode,
   SessionJoin,
@@ -49,6 +50,8 @@ export {
   SessionPresence,
   SessionState,
   SessionSwitch,
+  SessionUpdate,
+  SessionUpdated,
   Token,
 } from './session.js';
 export type { CloseReason } from './session.js';

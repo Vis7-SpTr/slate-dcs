@@ -10,19 +10,22 @@
     "dev:demo": "tsx watch src/main.ts --demo",
     "start": "tsx src/main.ts",
     "start:demo": "tsx src/main.ts --demo",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "relay": "tsx src/relay-main.ts"
   },
   "dependencies": {
     "@fastify/static": "^10.1.6",
     "@fastify/websocket": "^11.3.4",
+    "@peculiar/x509": "^2.2.0",
     "@slate-dcs/shared": "workspace:*",
     "fastify": "^5.12.7",
+    "reflect-metadata": "^0.2.2",
+    "ws": "^8.22.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
     "@types/ws": "^8.18.2",
-    "tsx": "^4.23.15",
-    "ws": "^8.22.0"
+    "tsx": "^4.23.15"
   }
 }

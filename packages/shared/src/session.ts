@@ -130,6 +130,24 @@ export type SessionPresence = z.infer<typeof SessionPresence>;
 export const SessionSwitch = defineMessage('session.switch', z.object({ code: SessionCode }));
 export type SessionSwitch = z.infer<typeof SessionSwitch>;
 
+/**
+ * `session.update` (host → relay, while joined): the own nick, role and aircraft
+ * after a slot change or a changed nick/role – always all three (§5, P1.6c).
+ * A change to role `jtac` takes him out of his flight.
+ */
+export const SessionUpdate = defineMessage(
+  'session.update',
+  z.object({ nick: Nick, role: RoleId, aircraft: AircraftInfo.nullable() }),
+);
+export type SessionUpdate = z.infer<typeof SessionUpdate>;
+
+/** `session.updated` (relay → rest of the session): someone's new nick, role or aircraft type. */
+export const SessionUpdated = defineMessage(
+  'session.updated',
+  z.object({ pid: Pid, nick: Nick, role: RoleId, aircraft: AircraftType.nullable() }),
+);
+export type SessionUpdated = z.infer<typeof SessionUpdated>;
+
 /** `session.leave` (host → relay): deliberate exit; releases flight position and check-ins. */
 export const SessionLeave = defineMessage('session.leave', z.object({}));
 export type SessionLeave = z.infer<typeof SessionLeave>;
@@ -144,6 +162,18 @@ export const SessionClosed = defineMessage(
   z.object({ reason: z.string().min(1) }),
 );
 export type SessionClosed = z.infer<typeof SessionClosed>;
+
+/**
+ * Relay certificate fingerprint (§3.1): SHA-256 of the certificate, first
+ * 128 bits, Crockford base32 in groups of four – `4D2A-QX7M-H81C-…` (26
+ * characters, the last group has two).
+ */
+export const RelayFingerprint = z
+  .string()
+  .regex(
+    new RegExp(`^[${CROCKFORD}]{4}(-[${CROCKFORD}]{4}){5}-[${CROCKFORD}]{2}$`),
+    'Expected a fingerprint like 4D2A-QX7M-H81C-5R2N-…',
+  );
 
 // ---------------------------------------------------------------------------
 // Helpers

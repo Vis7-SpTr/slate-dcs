@@ -361,3 +361,40 @@ describe('status in a flight (§6.4)', () => {
     expect(catchUp?.type === 'status.update' && catchUp.body.ias).toBe(150);
   });
 });
+
+describe('session.update (§5)', () => {
+  it('tells the session the new type and updates the flight', () => {
+    const other = joined('Other');
+    const [lead, two] = openFlight(1);
+    two.send('session.update', {
+      nick: 'Wing2',
+      role: 'pilot',
+      aircraft: { type: 'AH-64D_BLK_II', unit: 'Pontiac 1-2' },
+    });
+    expect(other.last('session.updated')?.body).toEqual({
+      pid: two.pid,
+      nick: 'Wing2',
+      role: 'pilot',
+      aircraft: { type: 'AH-64D_BLK_II' },
+    });
+    expect(flightOf(lead)?.members[1]?.aircraft).toEqual({ type: 'AH-64D_BLK_II' });
+    expect(other.last('flight.listed')?.body.types).toEqual(['FA-18C_hornet', 'AH-64D_BLK_II']);
+    two.status(42, 41);
+    expect(other.last('status.position')?.body).toMatchObject({
+      callsign: 'Enfield 1-2',
+      type: 'AH-64D_BLK_II',
+    });
+  });
+
+  it('takes a member who switches to a JTAC slot out of his flight', () => {
+    const [lead, two] = openFlight(1);
+    const id = lead.send('session.update', {
+      nick: 'Lead',
+      role: 'jtac',
+      aircraft: { type: 'forward_observer' },
+    });
+    expect(flightOf(lead)?.members.map((m) => m.pid)).toEqual([two.pid]);
+    expect(lead.last('flight.updated')?.re).toBe(id);
+    expect(flightOf(two)?.moveUp).toEqual({ pid: two.pid, allowedFrom: clock.now });
+  });
+});

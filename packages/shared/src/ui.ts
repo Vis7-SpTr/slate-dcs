@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { Coalition, Nick, RoleId } from './common.js';
 import { MessageId } from './envelope.js';
 import { FlightCreate, FlightJoin, FlightMove } from './flights.js';
-import { SessionCode } from './session.js';
+import { RelayFingerprint, SessionCode } from './session.js';
 import { SLICE_SCHEMAS, SpeedSelection, TimeDisplay, UiScale } from './slices.js';
 import { Fuel, Position, WeaponStation } from './status.js';
 
@@ -86,9 +86,17 @@ export const Command = z.discriminatedUnion('cmd', [
       coalition: Coalition.nullable(),
       nick: Nick,
       role: RoleId,
+      /**
+       * The relay fingerprint the user confirmed (§3.1). Without it, the host
+       * asks first (`session.fingerprintCheck`) unless it already knows the
+       * relay; with a known one that differs, the join is refused.
+       */
+      fingerprint: RelayFingerprint.nullable().optional(),
     }),
   ),
   command('session.leave', Empty),
+  // Host mode (P1.6c) – host only: run a relay for the group on this PC.
+  command('session.host', z.object({ enabled: z.boolean() })),
   // Flights (§7) – forwarded to the relay unchanged.
   command('flight.create', FlightCreate.shape.body),
   command('flight.join', FlightJoin.shape.body),

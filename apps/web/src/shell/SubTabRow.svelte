@@ -49,6 +49,8 @@
     gap: 0.375rem;
     max-width: 48rem;
     width: 100%;
+    /* Lets the row shrink and scroll instead of widening the whole page. */
+    min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
   }

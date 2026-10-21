@@ -5,6 +5,7 @@
   import { t } from '../../lib/i18n/index.js';
   import type { SubTabId } from '../../lib/router.svelte.js';
   import AircraftView from './AircraftView.svelte';
+  import FlightView from './FlightView.svelte';
 
   const { sub }: { sub: SubTabId } = $props();
 </script>
@@ -12,7 +13,7 @@
 {#if sub === 'aircraft'}
   <AircraftView />
 {:else if sub === 'flight'}
-  <EmptyState title={t('soon.flight.title')} text={t('soon.flight.text')} />
+  <FlightView />
 {:else}
   <EmptyState title={t('soon.checkIn.title')} text={t('soon.checkIn.text')} />
 {/if}

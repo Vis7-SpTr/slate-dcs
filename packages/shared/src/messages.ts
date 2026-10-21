@@ -25,6 +25,8 @@ import {
   SessionPresence,
   SessionState,
   SessionSwitch,
+  SessionUpdate,
+  SessionUpdated,
 } from './session.js';
 import { FuelCall, StatusPosition, StatusUpdate } from './status.js';
 
@@ -47,6 +49,8 @@ export const Message = z.discriminatedUnion('type', [
   SessionState,
   SessionPresence,
   SessionSwitch,
+  SessionUpdate,
+  SessionUpdated,
   SessionLeave,
   SessionClosed,
   // Status packages and fuel calls (§6)

@@ -70,3 +70,91 @@ p {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums slashed-zero;
 }
+
+/* Form controls shared by the pages with input (More → Session, Ownship →
+   Flight). Same sizes as the buttons elsewhere: at least --touch high. */
+.form-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.form-grid,
+.field {
+  min-width: 0;
+}
+
+.field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.field > span {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+}
+
+.field input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--touch);
+  padding: 0 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+
+.field input:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+.btn {
+  min-height: var(--touch);
+  min-width: 7rem;
+  padding: 0 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn.primary,
+.btn.selected {
+  border-color: var(--blue);
+  background: var(--blue-bg);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.choice .btn {
+  flex: 1;
+}
+
+.note {
+  color: var(--text-dim);
+  font-size: 0.875rem;
+}
+
+.alert {
+  padding: 0.6rem 0.8rem;
+  border-left: 0.25rem solid var(--amber);
+  background: var(--surface-2);
+  color: var(--amber);
+}
+
+.alert.red {
+  border-left-color: var(--red);
+  color: var(--red);
+}

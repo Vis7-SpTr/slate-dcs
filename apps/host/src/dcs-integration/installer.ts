@@ -13,10 +13,11 @@
 
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { blockState, removeBlock, withBlock } from './export-block.js';
+
+export { defaultDataDir } from '../data-dir.js';
 
 /** What can be wrong in a folder where SLATE is (partly) installed. */
 export type FolderProblem =
@@ -51,14 +52,6 @@ const OWN_DIRS = [['SLATE', 'lib'], ['SLATE']];
 const KEEP_BACKUPS = 10;
 
 const sha256 = (data: Buffer) => createHash('sha256').update(data).digest('hex');
-
-/** SLATE's own data folder: `%APPDATA%\SLATE` on Windows, `SLATE_DATA_DIR` to override. */
-export function defaultDataDir(env: NodeJS.ProcessEnv = process.env): string {
-  const override = env['SLATE_DATA_DIR'];
-  if (override !== undefined && override !== '') return override;
-  if (process.platform === 'win32' && env['APPDATA']) return join(env['APPDATA'], 'SLATE');
-  return join(homedir(), '.local', 'share', 'slate');
-}
 
 async function walk(dir: string, prefix: string[] = []): Promise<string[][]> {
   const entries = await readdir(dir, { withFileTypes: true });

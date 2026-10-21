@@ -8,7 +8,7 @@ export const PAGES = {
   ownship: ['aircraft', 'flight', 'checkIn'],
   cas: ['flights', 'missions', 'other'],
   checklist: ['normal', 'emergency', 'custom'],
-  more: ['plan', 'efb', 'dtc', 'log', 'settings', 'dcs'],
+  more: ['plan', 'efb', 'dtc', 'log', 'session', 'settings', 'dcs'],
 } as const;
 
 export type PageId = keyof typeof PAGES;

@@ -62,6 +62,9 @@
     height: 100dvh;
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    /* One column that never grows past the window: a wide row (e.g. 7 sub-tabs
+       at phone width) scrolls inside itself instead. */
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas: 'strip' 'title' 'content' 'subtabs' 'tabs';
     container: shell / inline-size;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)

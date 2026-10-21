@@ -15,6 +15,7 @@ function handlers(settingsSet: CommandHandlers['settings.set']): CommandHandlers
   return {
     'session.join': ok,
     'session.leave': ok,
+    'session.host': ok,
     'flight.create': ok,
     'flight.join': ok,
     'flight.leave': ok,

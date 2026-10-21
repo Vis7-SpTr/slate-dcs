@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 import { AircraftInfo, Coalition, EpochMs, Pid } from './common.js';
 import { Flight, FlightSummary } from './flights.js';
-import { Participant } from './session.js';
+import { Participant, RelayFingerprint, SessionCode } from './session.js';
 import { Fuel, Position, StatusPosition, StatusUpdate, WeaponStation } from './status.js';
 
 /** Speeds that can be shown on Ownship → Aircraft (More → Settings). */
@@ -49,6 +49,19 @@ export const HostSlice = z.object({
   }),
   /** Relay connection. */
   relay: z.object({ state: z.enum(['notConnected', 'connecting', 'connected']) }),
+  /**
+   * Host mode (P1.6c): this host runs a relay for the group. `addresses` are
+   * this PC's LAN IPv4 addresses with the port, to pass on with the codes and
+   * the fingerprint.
+   */
+  relayHost: z.object({
+    state: z.enum(['off', 'starting', 'on', 'failed']),
+    port: z.int().positive().nullable(),
+    addresses: z.array(z.string().min(1)),
+    codes: z.object({ blue: SessionCode, red: SessionCode, group: SessionCode }).nullable(),
+    fingerprint: RelayFingerprint.nullable(),
+    error: z.string().min(1).nullable(),
+  }),
   /** LAN access switch (P1.8). */
   lan: z.object({ enabled: z.boolean() }),
 });
@@ -56,18 +69,50 @@ export type HostSlice = z.infer<typeof HostSlice>;
 
 /** `session`: the coalition session on the relay. */
 export const SessionSlice = z.object({
-  joined: z.boolean(),
+  /**
+   * `notJoined`; `connecting` (first join); `confirmFingerprint` (manual join to
+   * an unknown relay – the user confirms `fingerprintCheck`); `joined`;
+   * `reconnecting` (link lost – the host rejoins with its token).
+   */
+  state: z.enum(['notJoined', 'connecting', 'confirmFingerprint', 'joined', 'reconnecting']),
+  /** The relay joined or being joined; `null` while not joined. */
+  relay: z
+    .object({
+      address: z.string().min(1),
+      /** Relay name and version from `welcome`, once connected. */
+      name: z.string().min(1).nullable(),
+      /** `true` = this host's own relay (host mode). */
+      own: z.boolean(),
+    })
+    .nullable(),
   /** Own participant ID while joined. */
   pid: Pid.nullable(),
   coalition: Coalition.nullable(),
+  nick: z.string().min(1).nullable(),
+  role: z.string().min(1).nullable(),
   participants: z.array(Participant),
+  /**
+   * A relay certificate to confirm (§3.1): first connect by hand, or – loud
+   * warning – a fingerprint that changed (`known` = the remembered one).
+   */
+  fingerprintCheck: z
+    .object({
+      address: z.string().min(1),
+      fingerprint: RelayFingerprint,
+      known: RelayFingerprint.nullable(),
+    })
+    .nullable(),
+  /** Why the last join or the link failed, in words; `null` if fine. */
+  error: z.string().min(1).nullable(),
 });
 export type SessionSlice = z.infer<typeof SessionSlice>;
 
-/** `flight`: the own flight and the list of open flights. */
+/** `flight`: the own flight, the list of open flights and the flight mates' status. */
 export const FlightSlice = z.object({
   own: Flight.nullable(),
   open: z.array(FlightSummary),
+  /** Last full status package of each flight mate (§6.4), with the host time it arrived. */
+  status: z.array(z.object({ pid: Pid, status: StatusUpdate.shape.body, receivedAt: EpochMs })),
 });
 export type FlightSlice = z.infer<typeof FlightSlice>;
 
@@ -242,10 +287,28 @@ export function defaultSlices(build: string): {
       build,
       bridge: { state: 'waiting', version: null, dcsVersion: null },
       relay: { state: 'notConnected' },
+      relayHost: {
+        state: 'off',
+        port: null,
+        addresses: [],
+        codes: null,
+        fingerprint: null,
+        error: null,
+      },
       lan: { enabled: false },
     },
-    session: { joined: false, pid: null, coalition: null, participants: [] },
-    flight: { own: null, open: [] },
+    session: {
+      state: 'notJoined',
+      relay: null,
+      pid: null,
+      coalition: null,
+      nick: null,
+      role: null,
+      participants: [],
+      fingerprintCheck: null,
+      error: null,
+    },
+    flight: { own: null, open: [], status: [] },
     ownship: {
       aircraft: null,
       status: null,

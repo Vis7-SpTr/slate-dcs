@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Starts slate-host: state store, command dispatcher, the UI server on
-// 127.0.0.1:7792, the Lua bridge receiver on UDP 127.0.0.1:7791 and the DCS
-// folder check (P1.3).
+// 127.0.0.1:7792, the Lua bridge receiver on UDP 127.0.0.1:7791, the DCS
+// folder check (P1.3) and the relay client with host mode (P1.6c).
 // Usage (repo root): pnpm start, or pnpm dev while developing. `--demo` fills
 // in demo data for layout tests instead of listening to DCS (see demo.ts).
 
@@ -17,6 +17,9 @@ import { startBridgeReceiver } from './dcs-bridge/receiver.js';
 import { DcsBridge } from './dcs-bridge/service.js';
 import { defaultDataDir, Installer } from './dcs-integration/installer.js';
 import { DcsIntegration } from './dcs-integration/service.js';
+import { RelayClient } from './session/client.js';
+import { HostMode } from './session/host-mode.js';
+import { TokenStore } from './session/tokens.js';
 import { applyDemoState, startDemoTicker } from './demo.js';
 import { createHostServer } from './server/server.js';
 import { StateStore } from './state/store.js';
@@ -32,15 +35,20 @@ const demo = process.argv.includes('--demo');
 
 const store = new StateStore(defaultSlices(BUILD));
 let stopDemo = (): void => undefined;
+let stopRelay = (): Promise<void> => Promise.resolve();
 if (demo) {
   applyDemoState(store);
   stopDemo = startDemoTicker(store);
 }
-// Demo mode never touches the real Saved Games folder.
+// Demo mode never touches the real Saved Games folder and joins no session.
 let dcs: DcsIntegration | null = null;
+let relay: { client: RelayClient; hostMode: HostMode } | null = null;
 const handlers = createHandlers(store, {
   get dcs() {
     return dcs;
+  },
+  get relay() {
+    return relay;
   },
 });
 const dispatcher = new CommandDispatcher(handlers);
@@ -58,6 +66,31 @@ if (!demo) {
     log: app.log.child({ module: 'dcs-folders' }),
   });
   void dcs.rescan();
+
+  const dataDir = defaultDataDir();
+  const relayLog = app.log.child({ module: 'relay' });
+  const client = new RelayClient({
+    store,
+    tokens: new TokenStore(join(dataDir, 'relays.json')),
+    log: app.log.child({ module: 'session' }),
+    app: `slate-host ${BUILD}`,
+  });
+  const hostMode = new HostMode({
+    store,
+    dataDir,
+    name: `slate-host ${BUILD} (host mode)`,
+    log: relayLog,
+    ...(process.env['SLATE_RELAY_PORT'] ? { port: Number(process.env['SLATE_RELAY_PORT']) } : {}),
+  });
+  relay = { client, hostMode };
+  const clientTick = setInterval(() => {
+    client.tick();
+  }, 1000);
+  stopRelay = async () => {
+    clearInterval(clientTick);
+    client.close();
+    await hostMode.stop();
+  };
 }
 
 await app.listen({ host: '127.0.0.1', port });
@@ -97,6 +130,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     app.log.info(`${signal} received – shutting down`);
     stopDemo();
     void stopBridge()
+      .then(() => stopRelay())
       .then(() => app.close())
       .then(() => process.exit(0));
   });
