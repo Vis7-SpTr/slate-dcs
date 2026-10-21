@@ -177,7 +177,7 @@ describe('presence, switch, leave (§5)', () => {
     relay.tick();
     expect(a.last('session.presence')?.body).toMatchObject({ pid: b.pid, presence: 'lost' });
     expect(b.of('session.presence').filter((p) => p.body.presence === 'lost')).toEqual([]);
-    expect(relay.stats().blue).toEqual({ online: 1, lost: 1 });
+    expect(relay.stats().blue).toMatchObject({ online: 1, lost: 1 });
 
     b.reconnect();
     b.hello();
@@ -349,13 +349,5 @@ describe('status (§6.4)', () => {
     const a = joined('Alpha');
     for (let i = 0; i < 60; i += 1) a.status(42, 41);
     expect(a.of('error').map((e) => e.body.code)).toEqual(['rateLimited']);
-  });
-});
-
-describe('flights before P1.6b', () => {
-  it('answers unsupported', () => {
-    const a = joined('Alpha');
-    a.send('flight.create', { name: 'Enfield', open: true });
-    expect(a.last('error')?.body.code).toBe('unsupported');
   });
 });

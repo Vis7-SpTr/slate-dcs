@@ -71,7 +71,7 @@ export {
   FlightPosition,
   FlightSummary,
   FlightUpdated,
-  LeadReserved,
+  MoveUp,
   normalizeFlightCode,
   PrivateFlightCode,
 } from './flights.js';

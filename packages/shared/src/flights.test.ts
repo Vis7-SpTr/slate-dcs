@@ -36,7 +36,7 @@ const flight = {
     { pid: 'p_2b81de', pos: 2, presence: 'lost', aircraft: { type: 'FA-18C_hornet' } },
   ],
   inCommand: 'p_7f3a9c',
-  leadReserved: null,
+  moveUp: null,
   privateCode: null,
 };
 
@@ -118,14 +118,24 @@ describe('Flight', () => {
     expect(Flight.safeParse(allLost).success).toBe(true);
   });
 
-  it('accepts -1 held free after a deliberate leave, -2 acting lead (§7.4)', () => {
-    const reserved = {
+  it('accepts a free -1 after a deliberate leave: -2 in command and may move up (§7.4)', () => {
+    const free = {
       ...flight,
       members: [member('p_b', 2), member('p_c', 3)],
       inCommand: 'p_b',
-      leadReserved: { since: 1792160000000, moveUpFrom: 1792160600000 },
+      moveUp: { pid: 'p_b', allowedFrom: 1792160000000 },
     };
-    expect(Flight.safeParse(reserved).success).toBe(true);
+    expect(Flight.safeParse(free).success).toBe(true);
+  });
+
+  it('accepts a lost -1 with -2 allowed to move up later (§7.4)', () => {
+    const lost = {
+      ...flight,
+      members: [member('p_a', 1, 'lost'), member('p_b', 2)],
+      inCommand: 'p_b',
+      moveUp: { pid: 'p_b', allowedFrom: 1792160600000 },
+    };
+    expect(Flight.safeParse(lost).success).toBe(true);
   });
 
   it('accepts a full flight of 4', () => {
@@ -161,10 +171,8 @@ describe('Flight', () => {
     ['a member who has left', { members: [member('p_a', 1, 'left')], inCommand: null }],
     ['inCommand not a member', { inCommand: 'p_zzz' }],
     ['inCommand on a lost member', { inCommand: 'p_2b81de' }],
-    [
-      '-1 reserved but taken',
-      { leadReserved: { since: 1792160000000, moveUpFrom: 1792160600000 } },
-    ],
+    ['moveUp for someone outside the flight', { moveUp: { pid: 'p_zzz', allowedFrom: 1 } }],
+    ['moveUp for -1 himself', { moveUp: { pid: 'p_7f3a9c', allowedFrom: 1 } }],
     ['an open flight with a private code', { privateCode: 'K7Q-4XM' }],
     ['number 0', { number: 0 }],
   ])('rejects %s', (_why, change) => {
@@ -183,10 +191,8 @@ describe('Flight', () => {
     ],
     [{ inCommand: 'p_zzz' }, 'Not a member'],
     [{ inCommand: 'p_2b81de' }, 'Member is not online'],
-    [
-      { leadReserved: { since: 1792160000000, moveUpFrom: 1792160600000 } },
-      '-1 is reserved but taken',
-    ],
+    [{ moveUp: { pid: 'p_zzz', allowedFrom: 1 } }, 'Not a member'],
+    [{ moveUp: { pid: 'p_7f3a9c', allowedFrom: 1 } }, '-1 cannot move up'],
     [{ privateCode: 'K7Q-4XM' }, 'An open flight has no private code'],
   ])('reports exactly the broken rule (%o)', (change, reason) => {
     const result = Flight.safeParse({ ...flight, ...change });

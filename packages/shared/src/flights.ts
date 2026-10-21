@@ -13,8 +13,11 @@ import { defineMessage } from './envelope.js';
 export const FLIGHT_RULES = {
   /** Positions -1 to -4 (scope §4.2). */
   maxMembers: 4,
-  /** How long -1 is held free after he leaves on purpose (§7.4). */
-  leadGraceMin: 10,
+  /**
+   * How long -1 must be lost before -2 may move up (§7.4). After a deliberate
+   * leave there is no wait (revised 21 Oct 2026).
+   */
+  moveUpAfterLostMin: 10,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -54,13 +57,17 @@ export const FlightMember = z.object({
 });
 export type FlightMember = z.infer<typeof FlightMember>;
 
-/** Set while -1 is held free after a deliberate leave (§7.4). */
-export const LeadReserved = z.object({
-  /** When -1 left. */
-  since: EpochMs,
-  /** From when -2 (or the member in command) may move up. */
-  moveUpFrom: EpochMs,
+/**
+ * Set while someone may take over -1 (§7.4): the -1 position is free after a
+ * deliberate leave, or -1 is lost. Replaces `leadReserved` (21 Oct 2026).
+ */
+export const MoveUp = z.object({
+  /** Who may move up: -2, or the member in command if there is no -2. */
+  pid: Pid,
+  /** From when: at once after a deliberate leave, 10 minutes after -1 was lost. */
+  allowedFrom: EpochMs,
 });
+export type MoveUp = z.infer<typeof MoveUp>;
 
 /** The full flight object (§7.1), as sent to the flight's members. */
 export const Flight = z
@@ -77,7 +84,7 @@ export const Flight = z
     members: z.array(FlightMember).max(FLIGHT_RULES.maxMembers),
     /** Lowest position whose member is online; `null` while nobody is online. */
     inCommand: Pid.nullable(),
-    leadReserved: LeadReserved.nullable(),
+    moveUp: MoveUp.nullable(),
     /** Only for private flights, and only sent to the member in command. */
     privateCode: PrivateFlightCode.nullable(),
   })
@@ -98,12 +105,13 @@ export const Flight = z
         ctx.addIssue({ code: 'custom', path: ['inCommand'], message: 'Member is not online' });
       }
     }
-    if (flight.leadReserved !== null && positions.includes(1)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['leadReserved'],
-        message: '-1 is reserved but taken',
-      });
+    if (flight.moveUp !== null) {
+      const mover = flight.members.find((member) => member.pid === flight.moveUp?.pid);
+      if (!mover) {
+        ctx.addIssue({ code: 'custom', path: ['moveUp'], message: 'Not a member' });
+      } else if (mover.pos === 1) {
+        ctx.addIssue({ code: 'custom', path: ['moveUp'], message: '-1 cannot move up' });
+      }
     }
     if (flight.open && flight.privateCode !== null) {
       ctx.addIssue({
@@ -163,7 +171,10 @@ export const FlightMove = defineMessage(
 );
 export type FlightMove = z.infer<typeof FlightMove>;
 
-/** `flight.moveUp` (host → relay): take over -1 after the grace period (§7.4). */
+/**
+ * `flight.moveUp` (host → relay): take over -1 once the flight's `moveUp`
+ * allows it – into a free -1, or swapping with a -1 lost for 10 minutes (§7.4).
+ */
 export const FlightMoveUp = defineMessage('flight.moveUp', z.object({}));
 export type FlightMoveUp = z.infer<typeof FlightMoveUp>;
 

@@ -65,3 +65,21 @@ export function newPid(taken: (pid: string) => boolean): string {
 export function newToken(): string {
   return randomBytes(32).toString('base64url');
 }
+
+/** Flight ID, e.g. `f_3a9c1e`. */
+export function newFlightId(taken: (id: string) => boolean): string {
+  for (;;) {
+    const id = `f_${randomBytes(3).toString('hex')}`;
+    if (!taken(id)) return id;
+  }
+}
+
+/** Private flight code, e.g. `K7Q-4XM` (§7.1): 6 Crockford base32 characters. */
+export function newPrivateCode(taken: (code: string) => boolean): string {
+  for (;;) {
+    let code = '';
+    for (let i = 0; i < 6; i += 1) code += ALPHABET.charAt(randomInt(ALPHABET.length));
+    const result = `${code.slice(0, 3)}-${code.slice(3)}`;
+    if (!taken(result)) return result;
+  }
+}
