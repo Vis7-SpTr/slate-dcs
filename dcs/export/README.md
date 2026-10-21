@@ -17,22 +17,19 @@ The folder mirrors `Saved Games\DCS\`, so installing is a copy of `Scripts\`:
 - **Never breaks DCS:** every call is wrapped in `pcall`; at most 20 errors per session go to `dcs.log` (prefix `SLATE`).
 - **Never blocks:** fire-and-forget UDP, no waiting, no file writes.
 - Lives in `Saved Games` only – the DCS install is never touched, so the integrity check is unaffected.
-- Optional `Scripts/SLATE/SLATE-config.lua` (`return { port = 7791 }`) changes the port; the app writes it in P1.3.
+- Optional `Scripts/SLATE/SLATE-config.lua` (`return { port = 7791 }`) changes the port; the app will write it once the port is a setting (removed with SLATE).
 
-## Manual install (until P1.3 does it)
+## Install
 
-1. Copy the `Scripts` folder from here into `C:\Users\<you>\Saved Games\DCS\` and allow merging (`Scripts\SLATE\…` and `Scripts\Hooks\SLATE-hook.lua` are added; nothing else is replaced).
-2. Add this block at the **end** of `Saved Games\DCS\Scripts\Export.lua` (create the file if it's missing):
+The app does it: **More → DCS → SLATE Lua files** lists every `DCS*` folder in Saved Games with Install, Repair and Remove (`apps/host/src/dcs-integration/`, `architecture.md` §1.2). It copies the four files, adds this block at the end of `Scripts\Export.lua` and backs `Export.lua` up to `%APPDATA%\SLATE\backups\` first:
 
-   ```lua
-   -- SLATE BEGIN – managed by SLATE, do not edit
-   pcall(function() local lfs = require('lfs'); dofile(lfs.writedir() .. [[Scripts\SLATE\SLATE-export.lua]]) end)
-   -- SLATE END
-   ```
+```lua
+-- SLATE BEGIN - managed by SLATE, do not edit
+pcall(function() local lfs = require('lfs'); dofile(lfs.writedir() .. [[Scripts\SLATE\SLATE-export.lua]]) end)
+-- SLATE END
+```
 
-3. Restart DCS (hooks are read only at game start).
-
-To remove: delete the three block lines from `Export.lua`, the folder `Scripts\SLATE\` and `Scripts\Hooks\SLATE-hook.lua`.
+A block added by hand before P1.3 (with an en dash after BEGIN) counts as installed. Hooks are read only at game start, so restart DCS after installing.
 
 ## Tests
 

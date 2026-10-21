@@ -12,6 +12,7 @@
   import { formatFuel, missionClock } from '../lib/format.js';
   import { host } from '../lib/host.svelte.js';
   import { t } from '../lib/i18n/index.js';
+  import { router } from '../lib/router.svelte.js';
 
   const slices = $derived(host.view.slices);
 
@@ -37,6 +38,8 @@
 
   const bridge = $derived(slices?.host.bridge.state ?? 'waiting');
   const relay = $derived(slices?.host.relay.state ?? 'notConnected');
+  /** A DCS folder whose SLATE files need repair (P1.3) – tap goes to More → DCS. */
+  const repair = $derived(slices?.dcs.folders.some((f) => f.state === 'needsRepair') ?? false);
 </script>
 
 <header class="strip">
@@ -56,6 +59,15 @@
         <span class="dot" aria-hidden="true"></span>{t('strip.dcs')}
         <span class="word">{t(`link.bridge.${bridge}`)}</span>
       </span>
+      {#if repair}
+        <button
+          type="button"
+          class="repair"
+          onclick={() => {
+            router.go('more', 'dcs');
+          }}>{t('strip.dcsRepair')}</button
+        >
+      {/if}
       <span class="link" data-state={relay}>
         <span class="dot" aria-hidden="true"></span>{t('strip.relay')}
         <span class="word">{t(`link.relay.${relay}`)}</span>
@@ -158,6 +170,18 @@
   .link[data-state='stale'] .word,
   .link[data-state='connecting'] .word {
     color: var(--amber);
+  }
+
+  .repair {
+    min-height: 2rem;
+    padding: 0 0.6rem;
+    border: 1px solid var(--amber);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--amber);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    cursor: pointer;
   }
 
   .clock {

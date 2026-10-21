@@ -25,6 +25,10 @@ function handlers(settingsSet: CommandHandlers['settings.set']): CommandHandlers
     'ownship.setStation': ok,
     'ownship.clearStation': ok,
     'ownship.setGun': ok,
+    'dcs.rescan': ok,
+    'dcs.install': ok,
+    'dcs.repair': ok,
+    'dcs.remove': ok,
     'settings.set': settingsSet,
   };
 }

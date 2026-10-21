@@ -7,11 +7,21 @@ import type { OwnshipOverrides } from '@slate-dcs/shared';
 
 import type { CommandHandlers } from './dispatcher.js';
 import { failed } from './dispatcher.js';
+import type { DcsIntegration } from '../dcs-integration/service.js';
 import type { StateStore } from '../state/store.js';
 
 const NO_RELAY = 'No relay connection yet – joining sessions and flights comes with P1.6';
+const NO_DCS = 'DCS folders are not available in demo mode';
 
-export function createHandlers(store: StateStore): CommandHandlers {
+export interface HandlerOptions {
+  /**
+   * Read at each command, so it can be set after the server started. `null`
+   * (demo mode, or not yet): the `dcs.*` commands answer notPossible.
+   */
+  readonly dcs?: DcsIntegration | null;
+}
+
+export function createHandlers(store: StateStore, options: HandlerOptions = {}): CommandHandlers {
   const notConnected = () => failed('notConnected', NO_RELAY);
 
   /** Applies a change to the ownship overrides and stores the slice. */
@@ -56,6 +66,19 @@ export function createHandlers(store: StateStore): CommandHandlers {
       setOverrides((overrides) => {
         overrides.gun = gun;
       }),
+
+    // DCS user folders (P1.3) – Saved Games\DCS*\Scripts only.
+    'dcs.rescan': async () => {
+      if (!options.dcs) return failed('notPossible', NO_DCS);
+      await options.dcs.rescan();
+      return { ok: true };
+    },
+    'dcs.install': ({ folder }) =>
+      options.dcs?.run('install', folder) ?? failed('notPossible', NO_DCS),
+    'dcs.repair': ({ folder }) =>
+      options.dcs?.run('repair', folder) ?? failed('notPossible', NO_DCS),
+    'dcs.remove': ({ folder }) =>
+      options.dcs?.run('remove', folder) ?? failed('notPossible', NO_DCS),
 
     // Settings – shared by all of the user's screens.
     'settings.set': (changes) => {

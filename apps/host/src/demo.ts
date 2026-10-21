@@ -26,6 +26,26 @@ export function applyDemoState(store: StateStore, now: number = Date.now()): voi
       playerName: 'Demo Pilot',
       clock: { mtimeSec: DEMO_MTIME_SEC, sampledAt: now, paused: false },
     },
+    // Layout only: in demo mode the dcs.* commands answer notPossible.
+    dcs: {
+      savedGames: 'C:\\Users\\Demo\\Saved Games',
+      folders: [
+        {
+          name: 'DCS',
+          path: 'C:\\Users\\Demo\\Saved Games\\DCS',
+          state: 'needsRepair',
+          problems: ['blockMissing'],
+        },
+        {
+          name: 'DCS.openbeta',
+          path: 'C:\\Users\\Demo\\Saved Games\\DCS.openbeta',
+          state: 'notInstalled',
+          problems: [],
+        },
+      ],
+      scannedAt: now,
+      error: null,
+    },
     ownship: {
       ...store.get('ownship'),
       aircraft: { type: 'FA-18C_hornet', unit: 'Enfield 1-1', slot: '1000043' },

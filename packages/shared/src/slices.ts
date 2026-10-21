@@ -164,6 +164,47 @@ export const MissionSlice = z.object({
 });
 export type MissionSlice = z.infer<typeof MissionSlice>;
 
+/** State of SLATE's Lua files in one DCS user folder (architecture.md §1.2). */
+export const DcsFolderState = z.enum(['notInstalled', 'installed', 'needsRepair']);
+export type DcsFolderState = z.infer<typeof DcsFolderState>;
+
+/** What needs repair in a DCS user folder. */
+export const DcsFolderProblem = z.enum([
+  /** SLATE's files are there, but Export.lua doesn't load them (e.g. rewritten by another tool). */
+  'blockMissing',
+  /** The SLATE block in Export.lua is incomplete, doubled or changed. */
+  'blockBroken',
+  /** One of SLATE's Lua files is missing. */
+  'fileMissing',
+  /** One of SLATE's Lua files differs from this SLATE version (older, or edited). */
+  'fileChanged',
+]);
+export type DcsFolderProblem = z.infer<typeof DcsFolderProblem>;
+
+export const DcsFolder = z.object({
+  /** Folder name in Saved Games, e.g. `DCS` or `DCS.openbeta`; commands name it. */
+  name: z.string().min(1),
+  /** Full path, for display. */
+  path: z.string().min(1),
+  state: DcsFolderState,
+  /** Empty unless `needsRepair`. */
+  problems: z.array(DcsFolderProblem),
+});
+export type DcsFolder = z.infer<typeof DcsFolder>;
+
+/** `dcs`: SLATE's files in the DCS user folders – install, check, repair, remove (P1.3). */
+export const DcsSlice = z.object({
+  /** The Saved Games folder; `null` if it couldn't be found. */
+  savedGames: z.string().min(1).nullable(),
+  /** The `DCS*` folders in it, sorted by name. */
+  folders: z.array(DcsFolder),
+  /** Host clock of the last scan; `null` before the first. */
+  scannedAt: EpochMs.nullable(),
+  /** Why the folders couldn't be read, if they couldn't. */
+  error: z.string().min(1).nullable(),
+});
+export type DcsSlice = z.infer<typeof DcsSlice>;
+
 /** `settings`: user settings, shared by all of his screens. */
 export const SettingsSlice = z.object({
   timeDisplay: TimeDisplay,
@@ -181,6 +222,7 @@ export const SLICE_SCHEMAS = {
   ownship: OwnshipSlice,
   traffic: TrafficSlice,
   mission: MissionSlice,
+  dcs: DcsSlice,
   settings: SettingsSlice,
 } as const;
 
@@ -192,6 +234,7 @@ export function defaultSlices(build: string): {
   ownship: OwnshipSlice;
   traffic: TrafficSlice;
   mission: MissionSlice;
+  dcs: DcsSlice;
   settings: SettingsSlice;
 } {
   return {
@@ -222,6 +265,7 @@ export function defaultSlices(build: string): {
       playerName: null,
       clock: null,
     },
+    dcs: { savedGames: null, folders: [], scannedAt: null, error: null },
     settings: { timeDisplay: 'zulu', uiScale: 1, speeds: ['ias', 'gs'] },
   };
 }

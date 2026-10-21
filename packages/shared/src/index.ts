@@ -130,6 +130,10 @@ export type { CommandName, HostParseResult, ScreenParseResult } from './ui.js';
 export {
   AirData,
   Countermeasures,
+  DcsFolder,
+  DcsFolderProblem,
+  DcsFolderState,
+  DcsSlice,
   defaultSlices,
   FlightSlice,
   HostSlice,

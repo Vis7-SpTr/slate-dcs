@@ -41,6 +41,7 @@ export const en = {
   // Status strip (ui-design.md §2)
   'strip.noFlight': 'No flight',
   'strip.dcs': 'DCS',
+  'strip.dcsRepair': 'Lua files: repair',
   'strip.relay': 'Relay',
   'strip.checkIn': 'Check-in',
   'strip.notCheckedIn': '—',
@@ -152,7 +153,7 @@ export const en = {
   'dcs.bridge.files': 'Installed files',
   'dcs.bridge.filesVersion': 'version {version}',
   'dcs.bridge.mismatch':
-    'The SLATE Lua files in Saved Games are version {found}, this SLATE needs version {needed}. Install the files of this version; until then DCS data is ignored.',
+    'The SLATE Lua files in Saved Games are version {found}, this SLATE needs version {needed}. Use Repair under SLATE Lua files below; until then DCS data is ignored.',
   'dcs.bridge.dcsVersion': 'DCS version',
   'dcs.mission': 'Mission',
   'dcs.mission.none': 'No mission running',
@@ -171,8 +172,26 @@ export const en = {
   'coalition.red': 'Red',
   'coalition.none': 'Spectator',
   'dcs.install': 'SLATE Lua files',
-  'dcs.install.text':
-    'Installing, checking, repairing and removing the SLATE files in Saved Games comes in P1.3. Until then they are copied by hand (dcs/export/README.md in the SLATE folder).',
+  'dcs.install.help':
+    'SLATE puts its files into Scripts in the DCS folder in Saved Games and adds one marked block to Export.lua. Lines of other tools (SRS, Tacview …) stay as they are, and Export.lua is backed up first. The DCS install folder is never changed, so the integrity check is not affected.',
+  'dcs.install.scanning': 'Looking for DCS folders…',
+  'dcs.install.error': 'Can’t check the DCS folders: {error}',
+  'dcs.install.noFolder': 'No DCS folder in {path}. Start DCS once, then check again.',
+  'dcs.install.note':
+    'Changes take effect when the next mission starts; a new or changed hook file only after DCS is restarted.',
+  'dcs.folder.notInstalled': 'Not installed',
+  'dcs.folder.installed': 'Installed',
+  'dcs.folder.needsRepair': 'Needs repair',
+  'dcs.problem.blockMissing':
+    'Export.lua no longer loads SLATE – another tool may have rewritten it',
+  'dcs.problem.blockBroken': 'The SLATE lines in Export.lua are incomplete, doubled or changed',
+  'dcs.problem.fileMissing': 'A SLATE file is missing',
+  'dcs.problem.fileChanged': 'A SLATE file is from another SLATE version or was edited',
+  'dcs.action.install': 'Install',
+  'dcs.action.repair': 'Repair',
+  'dcs.action.remove': 'Remove',
+  'dcs.action.rescan': 'Check again',
+  'action.confirm': 'CONFIRM',
 
   // Commands
   'cmd.pending': 'Saving…',

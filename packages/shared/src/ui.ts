@@ -41,6 +41,7 @@ export const SLICE_NAMES = [
   'ownship',
   'traffic',
   'mission',
+  'dcs',
   'settings',
 ] as const;
 export const SliceName = z.enum(SLICE_NAMES);
@@ -100,6 +101,12 @@ export const Command = z.discriminatedUnion('cmd', [
   command('ownship.setStation', WeaponStation.omit({ source: true })),
   command('ownship.clearStation', WeaponStation.pick({ st: true })),
   command('ownship.setGun', z.object({ rounds: z.int().nonnegative() }).nullable()),
+  // DCS user folders (P1.3) – host only. `folder` is a folder name from the
+  // `dcs` slice, never a path.
+  command('dcs.rescan', Empty),
+  command('dcs.install', z.object({ folder: z.string().min(1) })),
+  command('dcs.repair', z.object({ folder: z.string().min(1) })),
+  command('dcs.remove', z.object({ folder: z.string().min(1) })),
   // Settings – host only.
   command(
     'settings.set',

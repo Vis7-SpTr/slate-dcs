@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Starts slate-host: state store, command dispatcher, the UI server on
-// 127.0.0.1:7792 and the Lua bridge receiver on UDP 127.0.0.1:7791.
+// 127.0.0.1:7792, the Lua bridge receiver on UDP 127.0.0.1:7791 and the DCS
+// folder check (P1.3).
 // Usage (repo root): pnpm start, or pnpm dev while developing. `--demo` fills
 // in demo data for layout tests instead of listening to DCS (see demo.ts).
 
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { DEFAULT_PORTS, defaultSlices } from '@slate-dcs/shared';
@@ -13,6 +15,8 @@ import { CommandDispatcher } from './commands/dispatcher.js';
 import { createHandlers } from './commands/handlers.js';
 import { startBridgeReceiver } from './dcs-bridge/receiver.js';
 import { DcsBridge } from './dcs-bridge/service.js';
+import { defaultDataDir, Installer } from './dcs-integration/installer.js';
+import { DcsIntegration } from './dcs-integration/service.js';
 import { applyDemoState, startDemoTicker } from './demo.js';
 import { createHostServer } from './server/server.js';
 import { StateStore } from './state/store.js';
@@ -21,6 +25,9 @@ const port = Number(process.env['SLATE_PORT'] ?? DEFAULT_PORTS.hostUi);
 const bridgePort = Number(process.env['SLATE_BRIDGE_PORT'] ?? DEFAULT_PORTS.bridge);
 const uiDir =
   process.env['SLATE_UI_DIR'] ?? fileURLToPath(new URL('../../web/dist', import.meta.url));
+const luaDir =
+  process.env['SLATE_LUA_DIR'] ??
+  fileURLToPath(new URL('../../../dcs/export/Scripts', import.meta.url));
 const demo = process.argv.includes('--demo');
 
 const store = new StateStore(defaultSlices(BUILD));
@@ -29,7 +36,14 @@ if (demo) {
   applyDemoState(store);
   stopDemo = startDemoTicker(store);
 }
-const dispatcher = new CommandDispatcher(createHandlers(store));
+// Demo mode never touches the real Saved Games folder.
+let dcs: DcsIntegration | null = null;
+const handlers = createHandlers(store, {
+  get dcs() {
+    return dcs;
+  },
+});
+const dispatcher = new CommandDispatcher(handlers);
 const app = await createHostServer({
   store,
   dispatcher,
@@ -37,6 +51,14 @@ const app = await createHostServer({
   uiDir,
   logger: { level: 'info' },
 });
+if (!demo) {
+  dcs = new DcsIntegration({
+    store,
+    installer: new Installer({ luaDir, backupDir: join(defaultDataDir(), 'backups') }),
+    log: app.log.child({ module: 'dcs-folders' }),
+  });
+  void dcs.rescan();
+}
 
 await app.listen({ host: '127.0.0.1', port });
 app.log.info(`SLATE host ${BUILD}${demo ? ' (demo data)' : ''} – open http://127.0.0.1:${port}/`);

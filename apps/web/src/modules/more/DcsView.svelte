@@ -1,14 +1,15 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!--
   More → DCS: the DCS integration page. Shows the bridge and mission state as
-  the host sees them; installing/checking/repairing the Lua files comes with
-  P1.3.
+  the host sees them, and installs, checks, repairs and removes the SLATE Lua
+  files (P1.3).
 -->
 <script lang="ts">
   import { BRIDGE_VERSION, unitDisplayName } from '@slate-dcs/shared';
 
   import Card from '../../components/Card.svelte';
   import Row from '../../components/Row.svelte';
+  import DcsFolders from './DcsFolders.svelte';
   import { clock } from '../../lib/clock.svelte.js';
   import { missionClock } from '../../lib/format.js';
   import { host } from '../../lib/host.svelte.js';
@@ -69,9 +70,7 @@
     {/if}
   </Card>
 
-  <Card title={t('dcs.install')}>
-    <p class="dim">{t('dcs.install.text')}</p>
-  </Card>
+  <DcsFolders />
 </div>
 
 <style>

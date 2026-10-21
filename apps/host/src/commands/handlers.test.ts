@@ -134,3 +134,20 @@ describe('relay commands before the relay exists', () => {
     expect(store.seq).toBe(0);
   });
 });
+
+const DCS_COMMANDS: Command[] = [
+  { cmd: 'dcs.rescan', args: {} },
+  { cmd: 'dcs.install', args: { folder: 'DCS' } },
+  { cmd: 'dcs.repair', args: { folder: 'DCS' } },
+  { cmd: 'dcs.remove', args: { folder: 'DCS' } },
+];
+
+describe('dcs.* without the DCS folder check (demo mode)', () => {
+  it.each(DCS_COMMANDS)('$cmd answers notPossible', async (command) => {
+    const { run } = setup();
+    await expect(run(command)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'notPossible' },
+    });
+  });
+});
