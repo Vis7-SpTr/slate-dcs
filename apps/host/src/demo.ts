@@ -3,6 +3,8 @@
 // mission on Caucasus and an F/A-18C near Batumi. Started with `--demo`.
 // Never used in a real session.
 
+import { BRIDGE_VERSION } from '@slate-dcs/shared';
+
 import type { StateStore } from './state/store.js';
 
 /** 08:30:00 local on the mission's start date. */
@@ -10,35 +12,60 @@ const DEMO_MTIME_SEC = 8 * 3600 + 30 * 60;
 
 export function applyDemoState(store: StateStore, now: number = Date.now()): void {
   store.update({
-    host: { ...store.get('host'), bridge: { state: 'receiving' } },
+    host: {
+      ...store.get('host'),
+      bridge: { state: 'receiving', version: BRIDGE_VERSION, dcsVersion: '2.9.30.28738' },
+    },
     mission: {
       running: true,
+      name: 'SLATE demo',
       theatre: 'Caucasus',
       startDate: '2026-06-21',
-      clock: { mtimeSec: DEMO_MTIME_SEC, sampledAt: now },
+      multiplayer: false,
+      coalition: 'blue',
+      playerName: 'Demo Pilot',
+      clock: { mtimeSec: DEMO_MTIME_SEC, sampledAt: now, paused: false },
     },
     ownship: {
       ...store.get('ownship'),
+      aircraft: { type: 'FA-18C_hornet', unit: 'Enfield 1-1', slot: '1000043' },
+      countermeasures: { chaff: 60, flare: 54 },
+      airData: { tas: 179.6, mach: 0.55, vs: 2.5 },
       statusAt: now,
       status: {
         pos: { lat: 41.6123, lon: 41.6391, altMsl: 4572.4, altAgl: 4431.0 },
         hdg: 47.3,
+        hdgMag: 40.8,
         gs: 180.5,
         ias: 154.2,
-        fuel: { internalKg: 3912, externalKg: 1452, source: 'export' },
+        fuel: { internalKg: 3912, externalKg: 1018, source: 'export' },
         armament: {
           stations: [
-            { st: 1, name: 'AIM-9X', kind: 'missile', count: 1, source: 'export' },
-            { st: 2, name: 'GBU-12', kind: 'bomb', count: 2, source: 'export' },
-            { st: 3, name: 'AGM-65F Maverick', kind: 'missile', count: 1, source: 'manual' },
-            { st: 7, name: 'AGM-65F Maverick', kind: 'missile', count: 1, source: 'export' },
-            { st: 8, name: 'GBU-12', kind: 'bomb', count: 2, source: 'export' },
-            { st: 9, name: 'AIM-9X', kind: 'missile', count: 1, source: 'export' },
+            { st: 1, name: 'AIM-9X', kind: 'missile', role: 'aa', count: 1, source: 'export' },
+            { st: 2, name: 'GBU-12', kind: 'bomb', role: 'ag', count: 2, source: 'export' },
+            {
+              st: 3,
+              name: 'AGM-65F Maverick',
+              kind: 'missile',
+              role: 'ag',
+              count: 1,
+              source: 'manual',
+            },
+            {
+              st: 7,
+              name: 'AGM-65F Maverick',
+              kind: 'missile',
+              role: 'ag',
+              count: 1,
+              source: 'export',
+            },
+            { st: 8, name: 'GBU-12', kind: 'bomb', role: 'ag', count: 2, source: 'export' },
+            { st: 9, name: 'AIM-9X', kind: 'missile', role: 'aa', count: 1, source: 'export' },
           ],
           gun: { rounds: 578, source: 'export' },
           stores: [
             { st: 4, name: 'Litening TGP' },
-            { st: 5, name: 'FPU-8A' },
+            { st: 5, name: 'FPU-8A tank' },
           ],
         },
         avail: { pos: true, fuel: true, payload: true },

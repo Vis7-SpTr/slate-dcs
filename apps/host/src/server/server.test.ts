@@ -149,7 +149,7 @@ describe('host server – screens (protocol.md §14)', () => {
     const expected = {
       t: 'state.update',
       seq: 1,
-      body: { slices: { settings: { timeDisplay: 'local', uiScale: 1 } } },
+      body: { slices: { settings: { timeDisplay: 'local', uiScale: 1, speeds: ['ias', 'gs'] } } },
     };
     expect(update).toEqual(expected);
     expect(updateB).toEqual(expected);

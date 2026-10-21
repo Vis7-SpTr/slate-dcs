@@ -4,6 +4,7 @@
   user's screens (scope §4.7): a change here shows on every screen at once.
 -->
 <script lang="ts">
+  import { SpeedKind } from '@slate-dcs/shared';
   import type { TimeDisplay } from '@slate-dcs/shared';
 
   import Card from '../../components/Card.svelte';
@@ -19,6 +20,17 @@
   const settings = $derived(host.view.slices?.settings ?? null);
   let timeCommand: string | null = $state(null);
   let scaleCommand: string | null = $state(null);
+  let speedsCommand: string | null = $state(null);
+
+  /** Switches one speed on or off; the list keeps the fixed order of `SpeedKind`. */
+  function toggleSpeed(kind: SpeedKind): void {
+    if (settings === null) return;
+    const on = settings.speeds.includes(kind);
+    const speeds = SpeedKind.options.filter((k) =>
+      k === kind ? !on : settings.speeds.includes(k),
+    );
+    speedsCommand = host.send({ cmd: 'settings.set', args: { speeds } });
+  }
 
   function setTime(timeDisplay: TimeDisplay): void {
     timeCommand = host.send({ cmd: 'settings.set', args: { timeDisplay } });
@@ -73,6 +85,25 @@
         >
       </div>
       <CommandStatus id={scaleCommand} />
+    </Card>
+
+    <Card title={t('settings.speeds')}>
+      <p class="help">{t('settings.speeds.help')}</p>
+      <div class="toggles" role="group" aria-label={t('settings.speeds')}>
+        {#each SpeedKind.options as kind (kind)}
+          <button
+            type="button"
+            class:selected={settings.speeds.includes(kind)}
+            aria-pressed={settings.speeds.includes(kind)}
+            onclick={() => {
+              toggleSpeed(kind);
+            }}
+          >
+            {t(`speed.${kind}`)}
+          </button>
+        {/each}
+      </div>
+      <CommandStatus id={speedsCommand} />
     </Card>
 
     <Card title={t('settings.about')}>
@@ -132,7 +163,18 @@
     flex: 1;
   }
 
-  .segmented button.selected {
+  .toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .toggles button {
+    min-width: 6rem;
+  }
+
+  .segmented button.selected,
+  .toggles button.selected {
     border-color: var(--blue);
     background: var(--blue-bg);
     color: var(--text);

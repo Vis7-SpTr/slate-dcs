@@ -23,7 +23,7 @@ import {
 const slices = defaultSlices('0.1.0+3f2c1ab');
 const snapshot = { t: 'state.snapshot', seq: 0, body: { build: '0.1.0+3f2c1ab', slices } };
 const cmd = (name: string, args: unknown) => ({ t: 'cmd', id: ID_1, body: { cmd: name, args } });
-const localSettings = { timeDisplay: 'local', uiScale: 1.25 };
+const localSettings = { timeDisplay: 'local', uiScale: 1.25, speeds: ['ias', 'gs'] };
 
 describe('state.snapshot', () => {
   it('accepts the state of a host that just started', () => {
@@ -138,13 +138,15 @@ describe('commands (protocol.md §14.7)', () => {
     ['ownship.setPosition', null],
     ['ownship.setFuel', { internalKg: 2900, externalKg: 1500 }],
     ['ownship.setFuel', null],
-    ['ownship.setStation', { st: 3, name: 'AGM-114L', kind: 'missile', count: 2 }],
+    ['ownship.setStation', { st: 3, name: 'AGM-114L', kind: 'missile', role: 'ag', count: 2 }],
     ['ownship.clearStation', { st: 3 }],
     ['ownship.setGun', { rounds: 300 }],
     ['ownship.setGun', null],
     ['settings.set', { timeDisplay: 'local' }],
     ['settings.set', { uiScale: 1.25 }],
     ['settings.set', { timeDisplay: 'zulu', uiScale: 1 }],
+    ['settings.set', { speeds: ['ias', 'tas', 'mach'] }],
+    ['settings.set', { speeds: [] }],
   ])('accepts %s %o', (name, args) => {
     expect(Command.safeParse({ cmd: name, args }).success).toBe(true);
   });
@@ -173,6 +175,8 @@ describe('commands (protocol.md §14.7)', () => {
     ['settings.set with nothing to set', 'settings.set', {}],
     ['settings.set with an unknown time display', 'settings.set', { timeDisplay: 'pc' }],
     ['settings.set with UI scale 10', 'settings.set', { uiScale: 10 }],
+    ['settings.set with an unknown speed', 'settings.set', { speeds: ['cas'] }],
+    ['settings.set with a speed twice', 'settings.set', { speeds: ['ias', 'ias'] }],
   ])('rejects %s', (_why, name, args) => {
     expect(Command.safeParse({ cmd: name, args }).success).toBe(false);
   });

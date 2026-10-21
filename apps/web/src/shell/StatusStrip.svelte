@@ -7,7 +7,9 @@
 -->
 <script lang="ts">
   import { clock } from '../lib/clock.svelte.js';
-  import { formatKg, missionClock } from '../lib/format.js';
+  import { fuelUnit } from '@slate-dcs/shared';
+
+  import { formatFuel, missionClock } from '../lib/format.js';
   import { host } from '../lib/host.svelte.js';
   import { t } from '../lib/i18n/index.js';
 
@@ -26,8 +28,11 @@
   );
 
   const fuel = $derived.by(() => {
-    const f = slices?.ownship.status?.fuel;
-    return f ? formatKg(f.internalKg + f.externalKg) : t('value.none');
+    const ownship = slices?.ownship;
+    const f = ownship?.status?.fuel;
+    return f
+      ? formatFuel(f.internalKg + f.externalKg, fuelUnit(ownship?.aircraft?.type))
+      : t('value.none');
   });
 
   const bridge = $derived(slices?.host.bridge.state ?? 'waiting');
@@ -65,6 +70,7 @@
     <div class="item clock">
       {#if time?.time}
         <span class="value mono time">{time.time}<span class="suffix">{time.suffix}</span></span>
+        {#if time.paused}<span class="paused">{t('strip.paused')}</span>{/if}
       {:else}
         <span class="value dim">{t('strip.noMission')}</span>
       {/if}
@@ -167,6 +173,13 @@
     margin-left: 0.1rem;
     color: var(--text-dim);
     font-size: 0.9rem;
+  }
+
+  .paused {
+    color: var(--amber);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   .banner {

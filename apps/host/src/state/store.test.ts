@@ -6,7 +6,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { StateStore } from './store.js';
 import type { StateChange } from './store.js';
 
-const localSettings = { timeDisplay: 'local' as const, uiScale: 1 };
+const localSettings = {
+  timeDisplay: 'local' as const,
+  uiScale: 1,
+  speeds: ['ias' as const, 'gs' as const],
+};
 
 describe('StateStore', () => {
   it('starts at seq 0 with the initial slices', () => {

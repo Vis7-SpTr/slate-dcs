@@ -1,17 +1,28 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!--
-  More → DCS: the DCS integration page. Shows the bridge and mission state;
-  installing/checking/repairing the Lua files comes with P1.3.
+  More → DCS: the DCS integration page. Shows the bridge and mission state as
+  the host sees them; installing/checking/repairing the Lua files comes with
+  P1.3.
 -->
 <script lang="ts">
+  import { BRIDGE_VERSION, unitDisplayName } from '@slate-dcs/shared';
+
   import Card from '../../components/Card.svelte';
   import Row from '../../components/Row.svelte';
+  import { clock } from '../../lib/clock.svelte.js';
+  import { missionClock } from '../../lib/format.js';
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
 
   const slices = $derived(host.view.slices);
   const bridge = $derived(slices?.host.bridge.state ?? 'waiting');
+  const version = $derived(slices?.host.bridge.version ?? null);
+  const dcsVersion = $derived(slices?.host.bridge.dcsVersion ?? null);
+  const mismatch = $derived(version !== null && version !== BRIDGE_VERSION);
   const mission = $derived(slices?.mission ?? null);
+  const aircraft = $derived(slices?.ownship.aircraft ?? null);
+  const local = $derived(mission ? missionClock(mission, 'local', clock.now) : null);
+  const none = t('value.none');
 </script>
 
 <div class="dcs">
@@ -19,12 +30,40 @@
     <p class="state" data-state={bridge}>
       <span class="dot" aria-hidden="true"></span>{t(`dcs.bridge.${bridge}`)}
     </p>
+    {#if mismatch}
+      <p class="warning" role="alert">
+        {t('dcs.bridge.mismatch', { found: version ?? 0, needed: BRIDGE_VERSION })}
+      </p>
+    {/if}
+    <Row label={t('dcs.bridge.files')}>
+      {version === null ? none : t('dcs.bridge.filesVersion', { version })}
+    </Row>
+    <Row label={t('dcs.bridge.dcsVersion')}>{dcsVersion ?? none}</Row>
   </Card>
 
   <Card title={t('dcs.mission')}>
     {#if mission?.running}
-      <Row label={t('dcs.mission.map')}>{mission.theatre ?? t('value.none')}</Row>
-      <Row label={t('dcs.mission.date')} mono>{mission.startDate ?? t('value.none')}</Row>
+      <Row label={t('dcs.mission.name')}>{mission.name ?? none}</Row>
+      <Row label={t('dcs.mission.map')}>{mission.theatre ?? none}</Row>
+      <Row label={t('dcs.mission.date')} mono>{mission.startDate ?? none}</Row>
+      <Row label={t('dcs.mission.clock')} mono>
+        {local?.time ? `${local.time} L` : none}{#if local?.paused}
+          <span class="amber">{t('dcs.mission.paused')}</span>{/if}
+      </Row>
+      <Row label={t('dcs.mission.session')}>
+        {mission.multiplayer === null
+          ? none
+          : t(mission.multiplayer ? 'dcs.mission.multiplayer' : 'dcs.mission.singlePlayer')}
+      </Row>
+      <Row label={t('dcs.mission.player')}>{mission.playerName ?? none}</Row>
+      <Row label={t('dcs.mission.coalition')}>
+        {t(mission.coalition === null ? 'coalition.none' : `coalition.${mission.coalition}`)}
+      </Row>
+      <Row label={t('dcs.mission.slot')}>
+        {#if aircraft}
+          {unitDisplayName(aircraft.type)}{aircraft.unit ? ` – ${aircraft.unit}` : ''}
+        {:else}{none}{/if}
+      </Row>
     {:else}
       <p class="dim">{t('dcs.mission.none')}</p>
     {/if}
@@ -71,5 +110,18 @@
 
   .dim {
     color: var(--text-dim);
+  }
+
+  .amber {
+    margin-left: 0.4rem;
+    color: var(--amber);
+  }
+
+  .warning {
+    margin: 0.5rem 0 0.75rem;
+    padding: 0.6rem 0.8rem;
+    border-left: 0.25rem solid var(--amber);
+    background: var(--surface-2);
+    color: var(--amber);
   }
 </style>

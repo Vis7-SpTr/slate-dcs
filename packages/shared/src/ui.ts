@@ -8,7 +8,7 @@ import { Coalition, Nick, RoleId } from './common.js';
 import { MessageId } from './envelope.js';
 import { FlightCreate, FlightJoin, FlightMove } from './flights.js';
 import { SessionCode } from './session.js';
-import { SLICE_SCHEMAS, TimeDisplay, UiScale } from './slices.js';
+import { SLICE_SCHEMAS, SpeedSelection, TimeDisplay, UiScale } from './slices.js';
 import { Fuel, Position, WeaponStation } from './status.js';
 
 // ---------------------------------------------------------------------------
@@ -104,7 +104,11 @@ export const Command = z.discriminatedUnion('cmd', [
   command(
     'settings.set',
     z
-      .object({ timeDisplay: TimeDisplay.optional(), uiScale: UiScale.optional() })
+      .object({
+        timeDisplay: TimeDisplay.optional(),
+        uiScale: UiScale.optional(),
+        speeds: SpeedSelection.optional(),
+      })
       .refine((settings) => Object.keys(settings).length > 0, {
         message: 'Set at least one setting',
       }),

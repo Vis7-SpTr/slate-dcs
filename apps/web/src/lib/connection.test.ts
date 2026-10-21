@@ -66,7 +66,7 @@ const BUILD = '0.1.0-test';
 const slices = defaultSlices(BUILD);
 const snapshot = (seq = 0) => ({ t: 'state.snapshot', seq, body: { build: BUILD, slices } });
 const setLocal: Command = { cmd: 'settings.set', args: { timeDisplay: 'local' } };
-const localSettings = { timeDisplay: 'local', uiScale: 1 };
+const localSettings = { timeDisplay: 'local', uiScale: 1, speeds: ['ias', 'gs'] };
 
 let sockets: FakeSocket[];
 let timers: FakeTimers;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Status packages and fuel calls (protocol.md §6.2–§6.5).
-// The Lua bridge datagrams (§6.1) are local to the host and follow in P1.2.
+// The Lua bridge datagrams (§6.1) are local to the host: see bridge.ts.
 
 import { z } from 'zod';
 
@@ -46,8 +46,14 @@ export const Position = z.object({
 });
 export type Position = z.infer<typeof Position>;
 
-/** Heading in degrees true, 0 ≤ hdg < 360 (the host converts DCS's grid heading, §6.1). */
+/**
+ * Heading in degrees, 0 ≤ hdg < 360. "True" follows DCS (protocol.md §0): from
+ * the map grid's north, as DCS's avionics and the F10 ruler use it.
+ */
 export const HeadingTrue = z.number().min(0).lt(360);
+
+/** Magnetic heading in degrees, 0 ≤ hdg < 360, as the cockpit shows it (from DCS). */
+export const HeadingMagnetic = z.number().min(0).lt(360);
 
 /** Speed in m/s. */
 export const SpeedMs = z.number().nonnegative();
@@ -56,7 +62,19 @@ export const SpeedMs = z.number().nonnegative();
 export const WeaponKind = z.enum(['missile', 'bomb', 'rocket', 'other']);
 export type WeaponKind = z.infer<typeof WeaponKind>;
 
-/** Station number as counted by the airframe. */
+/**
+ * Air-to-air or air-to-ground, derived by the host from the DCS weapon type
+ * code (spike 3.3: air-to-air missiles have code 4,4,7,x). Everything that
+ * isn't an air-to-air missile counts as air-to-ground.
+ */
+export const WeaponRole = z.enum(['aa', 'ag']);
+export type WeaponRole = z.infer<typeof WeaponRole>;
+
+/**
+ * Station number: **DCS's station index** (1-based, as `LoGetPayloadInfo`
+ * lists them). The cockpit's own label (e.g. "8B" on the F-14, "5L" on the
+ * F-16) comes from the station layouts in `stations.ts`.
+ */
 const StationNumber = z.int().positive();
 
 /** A weapon station: what's on it and how many are left. */
@@ -64,6 +82,7 @@ export const WeaponStation = z.object({
   st: StationNumber,
   name: z.string().min(1),
   kind: WeaponKind,
+  role: WeaponRole,
   count: z.int().nonnegative(),
   source: ValueSource,
 });
@@ -116,6 +135,8 @@ export const StatusUpdate = defineMessage(
   z.object({
     pos: Position.nullable(),
     hdg: HeadingTrue.nullable(),
+    /** Magnetic heading from DCS; `null` where DCS has none (ground vehicles). */
+    hdgMag: HeadingMagnetic.nullable(),
     gs: SpeedMs.nullable(),
     ias: SpeedMs.nullable(),
     fuel: Fuel.nullable(),

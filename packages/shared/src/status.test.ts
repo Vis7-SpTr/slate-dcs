@@ -26,11 +26,12 @@ const message = (type: string, body: unknown) => ({
 const status = {
   pos: { lat: 42.1712, lon: 41.6823, altMsl: 3050.2, altAgl: 2890.0 },
   hdg: 271.4,
+  hdgMag: 264.8,
   gs: 180.5,
   ias: 160.2,
   fuel: { internalKg: 2900, externalKg: 0, source: 'export' },
   armament: {
-    stations: [{ st: 3, name: 'GBU-12', kind: 'bomb', count: 2, source: 'export' }],
+    stations: [{ st: 3, name: 'GBU-12', kind: 'bomb', role: 'ag', count: 2, source: 'export' }],
     gun: { rounds: 412, source: 'export' },
     stores: [{ st: 5, name: 'FPU-8A' }],
   },
@@ -48,6 +49,7 @@ describe('status.update', () => {
     const jtac = {
       pos: null,
       hdg: null,
+      hdgMag: null,
       gs: null,
       ias: null,
       fuel: null,
@@ -69,8 +71,8 @@ describe('status.update', () => {
       armament: {
         ...status.armament,
         stations: [
-          { st: 2, name: 'AIM-9X', kind: 'missile', count: 1, source: 'export' },
-          { st: 3, name: 'AGM-114K', kind: 'missile', count: 4, source: 'manual' },
+          { st: 2, name: 'AIM-9X', kind: 'missile', role: 'aa', count: 1, source: 'export' },
+          { st: 3, name: 'AGM-114K', kind: 'missile', role: 'ag', count: 4, source: 'manual' },
         ],
       },
     };
@@ -79,7 +81,9 @@ describe('status.update', () => {
 
   it('accepts an airframe without gun and an empty station', () => {
     const armament = {
-      stations: [{ st: 1, name: 'Hydra 70 M229 HE', kind: 'rocket', count: 0, source: 'export' }],
+      stations: [
+        { st: 1, name: 'Hydra 70 M229 HE', kind: 'rocket', role: 'ag', count: 0, source: 'export' },
+      ],
       gun: null,
       stores: [],
     };
@@ -91,6 +95,7 @@ describe('status.update', () => {
     ['longitude below -180°', { pos: { ...status.pos, lon: -181 } }],
     ['heading 360° (not normalised)', { hdg: 360 }],
     ['negative heading', { hdg: -1 }],
+    ['magnetic heading 360°', { hdgMag: 360 }],
     ['negative ground speed', { gs: -0.1 }],
     ['negative fuel', { fuel: { ...status.fuel, internalKg: -1 } }],
     ['an unknown value source', { fuel: { ...status.fuel, source: 'guess' } }],
@@ -122,7 +127,7 @@ describe('status.update', () => {
     expect(parse({ ...status, ...change }).success).toBe(false);
   });
 
-  it.each(['pos', 'hdg', 'gs', 'ias', 'fuel', 'armament', 'avail', 'reason'])(
+  it.each(['pos', 'hdg', 'hdgMag', 'gs', 'ias', 'fuel', 'armament', 'avail', 'reason'])(
     'rejects a package without "%s" (use null for unknown values)',
     (field) => {
       const incomplete = Object.fromEntries(
@@ -193,8 +198,8 @@ describe('headingDifference', () => {
 describe('weaponsCount', () => {
   const armament: Armament = {
     stations: [
-      { st: 2, name: 'AIM-9X', kind: 'missile', count: 1, source: 'export' },
-      { st: 3, name: 'GBU-12', kind: 'bomb', count: 2, source: 'export' },
+      { st: 2, name: 'AIM-9X', kind: 'missile', role: 'aa', count: 1, source: 'export' },
+      { st: 3, name: 'GBU-12', kind: 'bomb', role: 'ag', count: 2, source: 'export' },
     ],
     gun: { rounds: 412, source: 'export' },
     stores: [{ st: 5, name: 'FPU-8A' }],

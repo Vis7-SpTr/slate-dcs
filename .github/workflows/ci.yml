@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Runs on every push and pull request: format, lint, typecheck, test, licence checks.
+# Runs on every push and pull request: format, lint, typecheck, test (incl. Lua), build, licence checks.
 
 name: CI
 
@@ -29,11 +29,16 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      # Lua 5.1 (as in DCS) for the Lua bridge tests (dcs/export/test).
+      - run: sudo apt-get update -q && sudo apt-get install -y -q lua5.1
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+        env:
+          SLATE_REQUIRE_LUA: '1'
       - run: pnpm build
       - run: pnpm check:spdx
       - run: pnpm check:licenses

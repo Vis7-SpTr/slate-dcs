@@ -81,6 +81,7 @@ export {
   ExportAvailability,
   Fuel,
   FuelCall,
+  HeadingMagnetic,
   HeadingTrue,
   headingDifference,
   isStale,
@@ -94,6 +95,7 @@ export {
   Store,
   ValueSource,
   WeaponKind,
+  WeaponRole,
   weaponsCount,
   WeaponStation,
 } from './status.js';
@@ -126,6 +128,8 @@ export {
 export type { CommandName, HostParseResult, ScreenParseResult } from './ui.js';
 
 export {
+  AirData,
+  Countermeasures,
   defaultSlices,
   FlightSlice,
   HostSlice,
@@ -135,6 +139,8 @@ export {
   SessionSlice,
   SettingsSlice,
   SLICE_SCHEMAS,
+  SpeedKind,
+  SpeedSelection,
   TimeDisplay,
   TrafficSlice,
   UiScale,
@@ -151,3 +157,37 @@ export {
   zuluTimeOfDay,
 } from './maps.js';
 export { ulid } from './ulid.js';
+
+export {
+  BRIDGE_TIMING,
+  BRIDGE_VERSION,
+  BridgeDatagram,
+  BridgeHello,
+  BridgeMissionCheck,
+  BridgeOwn,
+  BridgeSession,
+  BridgeStation,
+  MissionCounts,
+  parseBridgeDatagram,
+  SessionEvent,
+  WeaponTypeCode,
+} from './bridge.js';
+export type { BridgeParseResult } from './bridge.js';
+
+export {
+  AIRFRAMES,
+  airframe,
+  FuelUnit,
+  fuelUnit,
+  fuelWeights,
+  unitDisplayName,
+} from './airframes.js';
+export type { Airframe } from './airframes.js';
+
+export { headingDegFromRad, normalizeDegrees, shortBearingDeg } from './geo.js';
+
+export { armamentTotals, shortStoreName, shortWeaponName } from './weapons.js';
+export type { ArmamentTotals, WeaponTotal } from './weapons.js';
+
+export { STATION_LAYOUTS, stationLabel, stationLayout } from './stations.js';
+export type { StationLayout, StationPoint } from './stations.js';

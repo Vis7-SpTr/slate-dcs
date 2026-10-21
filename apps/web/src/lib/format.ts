@@ -8,9 +8,10 @@ import {
   mapUtcOffsetHours,
   zuluTimeOfDay,
 } from '@slate-dcs/shared';
-import type { MissionSlice, TimeDisplay } from '@slate-dcs/shared';
+import type { FuelUnit, MissionSlice, TimeDisplay } from '@slate-dcs/shared';
 
 const M_TO_FT = 1 / 0.3048;
+const KG_TO_LBS = 1 / 0.45359237;
 const MS_TO_KT = 3600 / 1852;
 const NONE = '—';
 
@@ -48,16 +49,40 @@ export function formatSpeedKt(ms: number | null | undefined): string {
   return ms === null || ms === undefined ? NONE : `${integer.format(ms * MS_TO_KT)} kt`;
 }
 
-/** Degrees true → `047°` (360 is shown as 360, never 000 rounding up). */
-export function formatHeading(degrees: number | null | undefined): string {
-  if (degrees === null || degrees === undefined) return NONE;
-  const rounded = Math.round(degrees) % 360;
-  return `${String(rounded === 0 ? 360 : rounded).padStart(3, '0')}°`;
+/** Mach number → `0.83`. */
+export function formatMach(mach: number | null | undefined): string {
+  return mach === null || mach === undefined ? NONE : mach.toFixed(2);
 }
 
-/** kg → `3912 kg`. The airframe's own unit (lbs/kg) comes with the capacity table (P1.2). */
-export function formatKg(kg: number | null | undefined): string {
-  return kg === null || kg === undefined ? NONE : `${integer.format(kg)} kg`;
+/** Vertical speed, m/s + up → `+1200 ft/min` / `-350 ft/min`, to 10 ft/min. */
+export function formatVerticalSpeed(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined) return NONE;
+  const fpm = Math.round((ms * M_TO_FT * 60) / 10) * 10;
+  if (fpm === 0) return '0 ft/min';
+  return `${fpm > 0 ? '+' : '-'}${integer.format(Math.abs(fpm))} ft/min`;
+}
+
+/**
+ * Heading → `047°`, or `047°M` / `047°T` with a reference. 360 is shown as
+ * 360, never 000. Headings follow DCS (protocol.md §0): magnetic as the cockpit
+ * shows it, true from the map grid's north.
+ */
+export function formatHeading(
+  degrees: number | null | undefined,
+  reference: '' | 'M' | 'T' = '',
+): string {
+  if (degrees === null || degrees === undefined) return NONE;
+  const rounded = Math.round(degrees) % 360;
+  return `${String(rounded === 0 ? 360 : rounded).padStart(3, '0')}°${reference}`;
+}
+
+/**
+ * Fuel weight in the airframe's gauge unit (scope §4.2): kg → `8624 lbs` or
+ * `3912 kg`. The unit comes from the airframe table (`fuelUnit()`).
+ */
+export function formatFuel(kg: number | null | undefined, unit: FuelUnit): string {
+  if (kg === null || kg === undefined) return NONE;
+  return unit === 'lbs' ? `${integer.format(kg * KG_TO_LBS)} lbs` : `${integer.format(kg)} kg`;
 }
 
 /** Age of data: `now`, `12 s`, `3 min`, `2 h`. */
@@ -78,33 +103,44 @@ export interface ClockText {
   suffix: 'Z' | 'L';
   /** `true` when Zulu was asked for but the map's UTC offset is unknown. */
   zuluUnavailable: boolean;
+  /** `true` while the mission is paused (single player): the clock stands still. */
+  paused: boolean;
 }
 
 /**
  * The DCS mission clock (scope §4.6): mtime advanced by the time since it was
- * sampled, shown as Zulu or local. Without a known UTC offset for the map,
- * Zulu falls back to local time and says so.
+ * sampled (not while paused), shown as Zulu or local. Without a known UTC
+ * offset for the map, Zulu falls back to local time and says so.
  */
 export function missionClock(
   mission: MissionSlice,
   display: TimeDisplay,
   nowMs: number,
 ): ClockText {
-  if (!mission.running || mission.clock === null) {
-    return { time: null, suffix: display === 'zulu' ? 'Z' : 'L', zuluUnavailable: false };
+  const clock = mission.clock;
+  if (!mission.running || clock === null) {
+    return {
+      time: null,
+      suffix: display === 'zulu' ? 'Z' : 'L',
+      zuluUnavailable: false,
+      paused: false,
+    };
   }
-  const mtime = mission.clock.mtimeSec + Math.max(0, nowMs - mission.clock.sampledAt) / 1000;
+  const elapsed = clock.paused ? 0 : Math.max(0, nowMs - clock.sampledAt) / 1000;
+  const mtime = clock.mtimeSec + elapsed;
   const offset = mapUtcOffsetHours(mission.theatre);
   if (display === 'zulu' && offset !== null) {
     return {
       time: formatTimeOfDay(zuluTimeOfDay(mtime, offset)),
       suffix: 'Z',
       zuluUnavailable: false,
+      paused: clock.paused,
     };
   }
   return {
     time: formatTimeOfDay(localTimeOfDay(mtime)),
     suffix: 'L',
     zuluUnavailable: display === 'zulu',
+    paused: clock.paused,
   };
 }

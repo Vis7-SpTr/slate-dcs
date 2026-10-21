@@ -19,7 +19,13 @@ function setup() {
   return { store, run };
 }
 
-const hellfire = { st: 3, name: 'AGM-114L', kind: 'missile' as const, count: 2 };
+const hellfire = {
+  st: 3,
+  name: 'AGM-114L',
+  kind: 'missile' as const,
+  role: 'ag' as const,
+  count: 2,
+};
 
 describe('settings.set', () => {
   it('changes only the given setting', async () => {
@@ -27,7 +33,17 @@ describe('settings.set', () => {
     await expect(run({ cmd: 'settings.set', args: { timeDisplay: 'local' } })).resolves.toEqual({
       ok: true,
     });
-    expect(store.get('settings')).toEqual({ timeDisplay: 'local', uiScale: 1 });
+    expect(store.get('settings')).toEqual({
+      timeDisplay: 'local',
+      uiScale: 1,
+      speeds: ['ias', 'gs'],
+    });
+  });
+
+  it('sets the speeds shown', async () => {
+    const { store, run } = setup();
+    await run({ cmd: 'settings.set', args: { speeds: ['tas', 'mach'] } });
+    expect(store.get('settings').speeds).toEqual(['tas', 'mach']);
   });
 });
 
@@ -62,7 +78,7 @@ describe('ownship overrides', () => {
     await run({ cmd: 'ownship.setStation', args: hellfire });
     await run({
       cmd: 'ownship.setStation',
-      args: { st: 1, name: 'Hydra 70 M229 HE', kind: 'rocket', count: 19 },
+      args: { st: 1, name: 'Hydra 70 M229 HE', kind: 'rocket', role: 'ag', count: 19 },
     });
     await run({ cmd: 'ownship.setStation', args: { ...hellfire, count: 1 } });
     expect(store.get('ownship').overrides.stations.map((s) => [s.st, s.count])).toEqual([

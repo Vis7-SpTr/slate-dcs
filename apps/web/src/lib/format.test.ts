@@ -7,9 +7,11 @@ import {
   formatAge,
   formatAltitudeFt,
   formatHeading,
-  formatKg,
+  formatFuel,
   formatLatLon,
+  formatMach,
   formatSpeedKt,
+  formatVerticalSpeed,
   missionClock,
 } from './format.js';
 import { t } from './i18n/index.js';
@@ -34,11 +36,22 @@ describe('units', () => {
     [formatAltitudeFt(null), '—'],
     [formatSpeedKt(180.5), '351 kt'],
     [formatSpeedKt(undefined), '—'],
-    [formatKg(3912), '3912 kg'],
+    [formatFuel(3912, 'kg'), '3912 kg'],
+    [formatFuel(4900, 'lbs'), '10803 lbs'],
+    [formatFuel(null, 'lbs'), '—'],
+    [formatMach(0.827642619915), '0.83'],
+    [formatMach(null), '—'],
+    [formatVerticalSpeed(6.1), '+1200 ft/min'],
+    [formatVerticalSpeed(-1.778), '-350 ft/min'],
+    [formatVerticalSpeed(0.02), '0 ft/min'],
+    [formatVerticalSpeed(undefined), '—'],
     [formatHeading(47.3), '047°'],
     [formatHeading(359.7), '360°'],
     [formatHeading(0.2), '360°'],
     [formatHeading(180), '180°'],
+    [formatHeading(38.5, 'M'), '039°M'],
+    [formatHeading(45.6, 'T'), '046°T'],
+    [formatHeading(null, 'M'), '—'],
   ])('%s → %s', (actual, expected) => {
     expect(actual).toBe(expected);
   });
@@ -56,19 +69,30 @@ describe('formatAge', () => {
 });
 
 describe('missionClock', () => {
+  const none: MissionSlice = {
+    running: false,
+    name: null,
+    theatre: null,
+    startDate: null,
+    multiplayer: null,
+    coalition: null,
+    playerName: null,
+    clock: null,
+  };
   const running: MissionSlice = {
+    ...none,
     running: true,
     theatre: 'Caucasus',
     startDate: '2026-06-21',
-    clock: { mtimeSec: 8 * 3600 + 30 * 60, sampledAt: 1_000_000 },
+    clock: { mtimeSec: 8 * 3600 + 30 * 60, sampledAt: 1_000_000, paused: false },
   };
 
   it('shows nothing without a mission', () => {
-    const none: MissionSlice = { running: false, theatre: null, startDate: null, clock: null };
     expect(missionClock(none, 'zulu', 0)).toEqual({
       time: null,
       suffix: 'Z',
       zuluUnavailable: false,
+      paused: false,
     });
   });
 
@@ -77,6 +101,7 @@ describe('missionClock', () => {
       time: '08:30:12',
       suffix: 'L',
       zuluUnavailable: false,
+      paused: false,
     });
   });
 
@@ -85,6 +110,7 @@ describe('missionClock', () => {
       time: '04:30:00',
       suffix: 'Z',
       zuluUnavailable: false,
+      paused: false,
     });
   });
 
@@ -94,6 +120,20 @@ describe('missionClock', () => {
       time: '08:30:00',
       suffix: 'L',
       zuluUnavailable: true,
+      paused: false,
+    });
+  });
+
+  it('stands still while the mission is paused', () => {
+    const paused: MissionSlice = {
+      ...running,
+      clock: { mtimeSec: 8 * 3600 + 30 * 60, sampledAt: 1_000_000, paused: true },
+    };
+    expect(missionClock(paused, 'local', 1_000_000 + 60_000)).toEqual({
+      time: '08:30:00',
+      suffix: 'L',
+      zuluUnavailable: false,
+      paused: true,
     });
   });
 });
