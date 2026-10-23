@@ -3,10 +3,11 @@
 // pinned certificate fingerprint and the current token. The token is secret –
 // it stays in this file and never reaches a screen.
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { readFile } from 'node:fs/promises';
 
 import { z } from 'zod';
+
+import { writeFileAtomic } from '../fs-safe.js';
 
 const Entry = z.object({ fingerprint: z.string().nullable(), token: z.string().nullable() });
 const File = z.record(z.string(), Entry);
@@ -27,10 +28,7 @@ export class TokenStore {
   async set(address: string, entry: RelayEntry): Promise<void> {
     const entries = await this.#load();
     entries[address] = entry;
-    await mkdir(dirname(this.#path), { recursive: true });
-    const temp = `${this.#path}.slate-tmp`;
-    await writeFile(temp, `${JSON.stringify(entries, null, 2)}\n`, { mode: 0o600 });
-    await rename(temp, this.#path);
+    await writeFileAtomic(this.#path, `${JSON.stringify(entries, null, 2)}\n`, { mode: 0o600 });
   }
 
   async #load(): Promise<Record<string, RelayEntry>> {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // HTTP + WebSocket server for the host's screens (protocol.md §14,
-// architecture.md §1.1 Multiscreen). Localhost only until LAN access (P1.8).
+// architecture.md §1.1 Multiscreen). Listens on localhost; with LAN access on
+// (P1.8, lan/lan.ts) the LAN listeners hand their requests here too, and those
+// need a paired device's cookie.
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,6 +24,8 @@ import type { RawData, WebSocket } from 'ws';
 import { isAllowedHost, isAllowedOrigin } from './access.js';
 import { DEBUG_PAGE_CSS, DEBUG_PAGE_HTML, DEBUG_PAGE_JS } from './debug-page.js';
 import type { CommandDispatcher } from '../commands/dispatcher.js';
+import type { LanAccess } from '../lan/lan.js';
+import { LAN_CSS, NOT_PAIRED_PAGE, PAIR_FAILED_PAGE, PAIRED_PAGE } from '../lan/pages.js';
 import type { StateStore } from '../state/store.js';
 
 /** Largest frame a screen may send; commands are small. */
@@ -54,7 +58,22 @@ export interface HostServerOptions {
    */
   uiDir?: string;
   logger?: FastifyServerOptions['logger'];
+  /** LAN access (P1.8); read at each request, so it can be set after start. */
+  readonly lan?: LanAccess | null;
 }
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    /** The paired device a LAN request came from; `null` on localhost. */
+    slateDevice: string | null;
+  }
+}
+
+/** Commands only a screen on this PC may send (P1.9) – a paired iPad can't end or remove SLATE. */
+const LOCAL_ONLY = new Set(['app.quit', 'app.uninstall']);
+
+/** Paths a LAN device may open before it is paired. */
+const OPEN_ON_LAN = new Set(['/pair', '/lan.css']);
 
 export async function createHostServer(options: HostServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
@@ -64,13 +83,48 @@ export async function createHostServer(options: HostServerOptions): Promise<Fast
   });
   await app.register(websocket, { options: { maxPayload: MAX_FRAME_BYTES } });
 
-  // Every request must be addressed to the host by its own name (DNS rebinding).
+  app.decorateRequest('slateDevice', null);
+
+  // Every request must be addressed to the host by its own name (DNS rebinding);
+  // one from the LAN also needs a paired device (except the pairing link).
   app.addHook('onRequest', async (request, reply) => {
+    const lan = options.lan ?? null;
+    if (lan?.isLan(request.raw.socket)) {
+      if (!lan.hosts().has((request.headers.host ?? '').toLowerCase())) {
+        request.log.warn(
+          { host: request.headers.host },
+          'Refused LAN request with foreign Host header',
+        );
+        return reply.code(403).send('Forbidden');
+      }
+      if (OPEN_ON_LAN.has(request.url.split('?')[0] ?? '')) return;
+      const device = lan.device(request.raw);
+      if (!device) {
+        return reply.code(403).type('text/html; charset=utf-8').send(NOT_PAIRED_PAGE);
+      }
+      request.slateDevice = device.id;
+      return;
+    }
     if (!isAllowedHost(request.headers.host, boundPort(app))) {
       request.log.warn({ host: request.headers.host }, 'Refused request with foreign Host header');
       return reply.code(403).send('Forbidden');
     }
   });
+
+  // Pairing (P1.8): the QR code's link exchanges its one-time secret for the cookie.
+  app.get('/pair', async (request, reply) => {
+    const lan = options.lan ?? null;
+    if (!lan?.isLan(request.raw.socket)) return reply.redirect('/');
+    const secret = (request.query as Record<string, unknown>)['s'];
+    const cookie =
+      typeof secret === 'string'
+        ? await lan.handlePairing(secret, request.headers['user-agent'])
+        : null;
+    reply.header('cache-control', 'no-store').type('text/html; charset=utf-8');
+    if (cookie === null) return reply.code(403).send(PAIR_FAILED_PAGE);
+    return reply.header('set-cookie', cookie).send(PAIRED_PAGE);
+  });
+  app.get('/lan.css', (_request, reply) => reply.type('text/css; charset=utf-8').send(LAN_CSS));
 
   app.addHook('onSend', async (_request, reply) => {
     reply.header('content-security-policy', CONTENT_SECURITY_POLICY);
@@ -80,6 +134,9 @@ export async function createHostServer(options: HostServerOptions): Promise<Fast
   // Debug page: always at /debug; at / too while no UI is built.
   const sendDebugPage = (_request: FastifyRequest, reply: FastifyReply) =>
     reply.type('text/html; charset=utf-8').send(DEBUG_PAGE_HTML);
+  // "Is SLATE running here?" – a second start opens the running one's page (P1.9).
+  app.get('/api/health', () => ({ app: 'slate-host', build: options.build }));
+
   app.get('/debug', sendDebugPage);
   if (options.uiDir !== undefined && existsSync(join(options.uiDir, 'index.html'))) {
     await app.register(fastifyStatic, {
@@ -109,7 +166,12 @@ export async function createHostServer(options: HostServerOptions): Promise<Fast
       websocket: true,
       // Only SLATE's own pages may open the WebSocket (cross-site WebSocket).
       preValidation: async (request, reply) => {
-        if (!isAllowedOrigin(request.headers.origin, boundPort(app))) {
+        const lan = options.lan ?? null;
+        const allowed = lan?.isLan(request.raw.socket)
+          ? request.headers.origin?.toLowerCase() ===
+            `http://${(request.headers.host ?? '').toLowerCase()}`
+          : isAllowedOrigin(request.headers.origin, boundPort(app));
+        if (!allowed) {
           request.log.warn(
             { origin: request.headers.origin },
             'Refused WebSocket from foreign origin',
@@ -119,7 +181,18 @@ export async function createHostServer(options: HostServerOptions): Promise<Fast
       },
     },
     (socket, request) => {
-      serveScreen(socket, options, request.log);
+      serveScreen(socket, options, request.log, request.slateDevice !== null);
+      // A paired device's screen: counted as connected, closed if it's removed.
+      const device = request.slateDevice;
+      const lan = options.lan ?? null;
+      if (device !== null && lan) {
+        const detach = lan.attach(device, {
+          close: () => {
+            socket.close(4001, 'Device removed');
+          },
+        });
+        socket.on('close', detach);
+      }
     },
   );
 
@@ -127,7 +200,12 @@ export async function createHostServer(options: HostServerOptions): Promise<Fast
 }
 
 /** One connected screen: snapshot on connect, live updates, commands (§14.2). */
-function serveScreen(socket: WebSocket, options: HostServerOptions, log: FastifyBaseLogger): void {
+function serveScreen(
+  socket: WebSocket,
+  options: HostServerOptions,
+  log: FastifyBaseLogger,
+  fromLan: boolean,
+): void {
   const { store, dispatcher, build } = options;
 
   const send = (message: HostToScreen): void => {
@@ -163,6 +241,15 @@ function serveScreen(socket: WebSocket, options: HostServerOptions, log: Fastify
     const message = parsed.message;
     if (message.t === 'state.resync') {
       sendSnapshot();
+      return;
+    }
+    if (fromLan && LOCAL_ONLY.has(message.body.cmd)) {
+      const text = 'Only possible on the PC that runs SLATE';
+      send({
+        t: 'cmd.result',
+        id: message.id,
+        body: { ok: false, error: { code: 'forbidden', text } },
+      });
       return;
     }
     void dispatcher.dispatch(message.id, message.body).then((outcome) => {

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Host and Origin checks (architecture.md §1.1, "Pairing and access control").
 // They stop a website open in the user's browser from driving the host
-// (cross-site WebSocket, DNS rebinding). LAN addresses are added with P1.8.
+// (cross-site WebSocket, DNS rebinding). Requests on the LAN listeners (P1.8)
+// are checked in server.ts against lan/lan.ts instead.
 
 /** Names the host answers to on localhost. */
 const LOCAL_NAMES = ['127.0.0.1', 'localhost', '[::1]'];

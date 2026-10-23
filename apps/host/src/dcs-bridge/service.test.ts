@@ -55,7 +55,7 @@ describe('DcsBridge – own-ship data', () => {
 
     expect(bridge.state).toBe('receiving');
     expect(updates).toHaveLength(1);
-    expect(store.get('host').bridge).toEqual({ state: 'receiving', version: 3, dcsVersion: null });
+    expect(store.get('host').bridge).toEqual({ state: 'receiving', version: 4, dcsVersion: null });
     expect(store.get('mission')).toMatchObject({
       running: true,
       clock: { mtimeSec: 64800, sampledAt: T0, paused: false },
@@ -296,13 +296,13 @@ describe('DcsBridge – overrides', () => {
 describe('DcsBridge – versions and bad data', () => {
   it('records the DCS version from hello', () => {
     const { store, send, messages } = setup();
-    send({ t: 'hello', bv: 3, env: 'export', dcs: '2.9.30.28738' });
+    send({ t: 'hello', bv: 4, env: 'export', dcs: '2.9.30.28738' });
     expect(store.get('host').bridge).toEqual({
       state: 'waiting',
-      version: 3,
+      version: 4,
       dcsVersion: '2.9.30.28738',
     });
-    expect(messages('info')).toContain('Lua bridge: export script v3, DCS 2.9.30.28738');
+    expect(messages('info')).toContain('Lua bridge: export script v4, DCS 2.9.30.28738');
   });
 
   it('reports Lua files of another version once and ignores their data', () => {
@@ -318,7 +318,7 @@ describe('DcsBridge – versions and bad data', () => {
 
   it('warns about the first 5 bad datagrams, then logs them as debug', () => {
     const { bridge, messages } = setup();
-    for (let i = 0; i < 7; i += 1) bridge.handleText('{"t":"own","bv":3}');
+    for (let i = 0; i < 7; i += 1) bridge.handleText('{"t":"own","bv":4}');
     expect(messages('warn')).toHaveLength(5);
     expect(messages('debug')).toHaveLength(2);
   });
@@ -327,7 +327,7 @@ describe('DcsBridge – versions and bad data', () => {
     const { send, messages } = setup();
     send({
       t: 'missionCheck',
-      bv: 3,
+      bv: 4,
       coalitions: { blue: { groups: 12, units: 30, routed: 10, withFrequency: 8 } },
     });
     expect(messages('info')).toContain(

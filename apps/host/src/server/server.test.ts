@@ -98,6 +98,14 @@ describe('host server – HTTP', () => {
     expect(response.headers['content-security-policy']).toContain("default-src 'none'");
   });
 
+  it('answers the health check a second SLATE start looks for (P1.9)', async () => {
+    const response = await app.inject({
+      url: '/api/health',
+      headers: { host: `127.0.0.1:${port}` },
+    });
+    expect(response.json()).toEqual({ app: 'slate-host', build: BUILD });
+  });
+
   it.each(['/debug.js', '/debug.css'])('serves %s', async (url) => {
     const response = await app.inject({ url, headers: { host: `localhost:${port}` } });
     expect(response.statusCode).toBe(200);

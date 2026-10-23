@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 --[[
-  SLATE Lua bridge – GUI hook (bridge version 3).
+  SLATE Lua bridge – GUI hook (bridge version 4).
 
   Lives in Saved Games\DCS\Scripts\Hooks\ like the SRS hook. Sends what the
   export environment can't see to the SLATE host (UDP 127.0.0.1:7791,
@@ -11,10 +11,14 @@
     * missionCheck – once per mission load: how much of the mission
                      DCS.getCurrentMission() shows on this PC (P1.2 check)
     * hello        – at load and every 30 s
+    * chat         – a received chat line starting with "[SLATE]": the
+                     server's discovery announcement (protocol.md §2, P1.7).
+                     Every other chat line is ignored and never leaves DCS.
 
   Rules (architecture.md §1.1):
-    * READ-ONLY: only DCS.get*/DCS.is*/net.get_* getters. No chat, no slot
-      changes, no net.dostring_in, nothing that changes the mission.
+    * READ-ONLY: only DCS.get*/DCS.is*/net.get_* getters and the read-only
+      onChatMessage callback. Never sends chat, no slot changes, no
+      net.dostring_in, nothing that changes the mission.
     * Own player only: name, side, slot – no UCID, no IP, nobody else.
     * Everything is wrapped in pcall – an error here can't break DCS.
     * Fire-and-forget UDP, never waits.
@@ -142,6 +146,37 @@ do
         })
     end
 
+    local CHAT_PREFIX = '[SLATE]'
+    local CHAT_MAX = 1000 -- characters, as BridgeChat in packages/shared/src/bridge.ts
+    local chatLogged = 0
+
+    -- Discovery (P1.7): passes the server's [SLATE] lines on, nothing else.
+    -- `server` tells the host whether the server sent it – a player could
+    -- type such a line too, and the host only follows the server's.
+    -- The prefix is looked for anywhere in the line, in case DCS puts the
+    -- sender's name in front (to check on the server PC, spike 3.5).
+    local function chat(message, from)
+        if type(message) ~= 'string' then return end
+        local at = message:find(CHAT_PREFIX, 1, true)
+        if not at then return end
+        local serverId = lib.num(lib.call(net, 'get_server_id')) or 1
+        local sender = lib.num(from)
+        -- The first lines also go to dcs.log, for the check on a real server (spike 3.5).
+        chatLogged = chatLogged + 1
+        if chatLogged <= 5 and type(log) == 'table' and type(log.write) == 'function' then
+            pcall(log.write, 'SLATE', log.INFO, string.format('chat line from %s (server %s): %s',
+                tostring(from), tostring(serverId), message:sub(1, 200)))
+        end
+        send({
+            t = 'chat',
+            bv = lib.VERSION,
+            text = message:sub(at, at + CHAT_MAX - 1),
+            server = sender == serverId,
+            from = sender,
+            serverId = serverId,
+        })
+    end
+
     local function checkSlot()
         local p = player()
         local slot = p and table.concat({ tostring(p.side), tostring(p.slot), tostring(p.unitType) }, '|')
@@ -179,6 +214,11 @@ do
     function callbacks.onPlayerChangeSlot(id)
         if not sender or not running then return end
         if id == lib.call(net, 'get_my_player_id') then checkSlot() end
+    end
+
+    function callbacks.onChatMessage(message, from)
+        if not sender then return end
+        chat(message, from)
     end
 
     function callbacks.onSimulationFrame()

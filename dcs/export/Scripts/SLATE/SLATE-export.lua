@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 --[[
-  SLATE Lua bridge – export side (bridge version 3).
+  SLATE Lua bridge – export side (bridge version 4).
 
   Loaded from Saved Games\DCS\Scripts\Export.lua by the SLATE block. Sends the
   own aircraft's raw data to the SLATE host as JSON datagrams over UDP to

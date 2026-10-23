@@ -47,7 +47,7 @@ beforeEach(async () => {
   installer = new Installer({ luaDir: LUA_DIR, backupDir: backups, now: () => clock });
 });
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe('Installer.bundle', () => {

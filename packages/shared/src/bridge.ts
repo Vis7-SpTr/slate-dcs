@@ -10,7 +10,7 @@ import { z } from 'zod';
  * Bridge version (`bv`, architecture.md §1.1 rule 6). Bump it whenever a
  * datagram changes; the Lua files in `dcs/export` carry the same number.
  */
-export const BRIDGE_VERSION = 3;
+export const BRIDGE_VERSION = 4;
 
 /** Timing of the bridge as seen by the host. */
 export const BRIDGE_TIMING = {
@@ -204,6 +204,25 @@ export const BridgeMissionCheck = z.object({
 export type BridgeMissionCheck = z.infer<typeof BridgeMissionCheck>;
 
 // ---------------------------------------------------------------------------
+// chat – GUI hook, on event (P1.7): a chat line starting with `[SLATE]`
+// (discovery, protocol.md §2). Other chat lines are never passed on.
+
+export const BridgeChat = z.object({
+  t: z.literal('chat'),
+  bv: Bv,
+  text: z.string().min(1).max(1000),
+  /**
+   * `true` if the line came from the server (`from` = `net.get_server_id()`).
+   * The host only follows those – a player could type a `[SLATE]` line too.
+   */
+  server: z.boolean(),
+  /** Raw sender and server player IDs, for the log (spike 3.5: what DCS really passes). */
+  from: maybe(z.number()),
+  serverId: maybe(z.number()),
+});
+export type BridgeChat = z.infer<typeof BridgeChat>;
+
+// ---------------------------------------------------------------------------
 // Parsing
 
 export const BridgeDatagram = z.discriminatedUnion('t', [
@@ -211,6 +230,7 @@ export const BridgeDatagram = z.discriminatedUnion('t', [
   BridgeOwn,
   BridgeSession,
   BridgeMissionCheck,
+  BridgeChat,
 ]);
 export type BridgeDatagram = z.infer<typeof BridgeDatagram>;
 
@@ -219,13 +239,13 @@ export type BridgeParseResult =
   | { ok: false; reason: 'badJson' | 'badDatagram' | 'unknownType'; text: string }
   | { ok: false; reason: 'versionMismatch'; bv: number };
 
-const KNOWN_TYPES = new Set(['hello', 'own', 'session', 'missionCheck']);
+const KNOWN_TYPES = new Set(['hello', 'own', 'session', 'missionCheck', 'chat']);
 
 /**
  * Reads one datagram. The version is checked first: a datagram from Lua files
  * of another version is reported as `versionMismatch` and never read further,
- * since its fields may mean something else. Unknown types (e.g. `chat`, P1.7)
- * are reported, not treated as errors.
+ * since its fields may mean something else. Unknown types (from newer Lua
+ * files) are reported, not treated as errors.
  */
 export function parseBridgeDatagram(text: string): BridgeParseResult {
   let raw: unknown;

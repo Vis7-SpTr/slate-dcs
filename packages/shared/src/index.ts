@@ -132,6 +132,7 @@ export type { CommandName, HostParseResult, ScreenParseResult } from './ui.js';
 
 export {
   AirData,
+  AppState,
   Countermeasures,
   DcsFolder,
   DcsFolderProblem,
@@ -140,9 +141,11 @@ export {
   defaultSlices,
   FlightSlice,
   HostSlice,
+  LanState,
   MissionSlice,
   OwnshipOverrides,
   OwnshipSlice,
+  PairedDevice,
   SessionSlice,
   SettingsSlice,
   SLICE_SCHEMAS,
@@ -163,6 +166,16 @@ export {
   mapUtcOffsetHours,
   zuluTimeOfDay,
 } from './maps.js';
+export {
+  ANNOUNCE_JOIN_MS,
+  ANNOUNCE_PREFIX,
+  Announcement,
+  announcedCoalition,
+  AnnouncementReader,
+  formatAnnouncement,
+  parseAnnouncementLine,
+} from './discovery.js';
+
 export { ulid } from './ulid.js';
 
 export {
@@ -170,6 +183,7 @@ export {
   BRIDGE_VERSION,
   BridgeDatagram,
   BridgeHello,
+  BridgeChat,
   BridgeMissionCheck,
   BridgeOwn,
   BridgeSession,

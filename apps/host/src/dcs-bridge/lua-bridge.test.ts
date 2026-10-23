@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// End-to-end check of the Lua side: runs SLATE-export.lua and SLATE-hook.lua
-// in Lua 5.1 (as DCS does) against a mocked DCS (dcs/export/test/harness.lua)
-// and reads every datagram they send with the host's own schemas.
+// End-to-end check of the Lua side: runs SLATE-export.lua, SLATE-hook.lua and
+// the server hook in Lua 5.1 (as DCS does) against a mocked DCS
+// (dcs/export/test/harness.lua) and reads every datagram they send with the
+// host's own schemas.
 //
 // Needs a Lua 5.1 interpreter (`lua5.1` or `lua`). Without one the tests are
 // skipped – except in CI, where SLATE_REQUIRE_LUA=1 makes that a failure.
 
 import { spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { parseBridgeDatagram } from '@slate-dcs/shared';
-import type { BridgeDatagram, BridgeOwn, BridgeSession } from '@slate-dcs/shared';
+import { AnnouncementReader, parseBridgeDatagram } from '@slate-dcs/shared';
+import type { BridgeChat, BridgeDatagram, BridgeOwn, BridgeSession } from '@slate-dcs/shared';
 import { describe, expect, it } from 'vitest';
 
+import { announceFileText, announcementLines, autostartFileText } from '../cas-relay/announce.js';
 import { exportValues } from './convert.js';
 
 const HARNESS = fileURLToPath(new URL('../../../../dcs/export/test/harness.lua', import.meta.url));
@@ -41,9 +46,10 @@ interface Run {
   logs: string[];
 }
 
-function run(scenario: string): Run {
+function run(scenario: string, savedGames?: string): Run {
   if (lua === null) throw new Error('no Lua');
-  const result = spawnSync(lua, [HARNESS, scenario], { encoding: 'utf8' });
+  const args = savedGames === undefined ? [HARNESS, scenario] : [HARNESS, scenario, savedGames];
+  const result = spawnSync(lua, args, { encoding: 'utf8' });
   expect(result.stderr).toBe('');
   expect(result.status).toBe(0);
   const lines = result.stdout.trim().split('\n');
@@ -69,7 +75,7 @@ describe.skipIf(lua === null)('Lua bridge – export script', () => {
   it('sends hello and own at 4 Hz to 127.0.0.1:7791, all accepted by the host', () => {
     const { lines, datagrams, own } = run('export');
     expect(lines[0]).toBe('PEER 127.0.0.1 7791');
-    expect(datagrams[0]).toEqual({ t: 'hello', bv: 3, env: 'export', dcs: '2.9.30.28738' });
+    expect(datagrams[0]).toEqual({ t: 'hello', bv: 4, env: 'export', dcs: '2.9.30.28738' });
     // 2.5 s of frames at 50 fps → one datagram every 13th frame (0.26 s).
     expect(own.length).toBeGreaterThanOrEqual(9);
     expect(own.length).toBeLessThanOrEqual(10);
@@ -174,7 +180,7 @@ describe.skipIf(lua === null)('Lua bridge – GUI hook', () => {
     const check = run('hook').datagrams.find((d) => d.t === 'missionCheck');
     expect(check).toEqual({
       t: 'missionCheck',
-      bv: 3,
+      bv: 4,
       coalitions: {
         blue: { groups: 3, units: 7, routed: 1, withFrequency: 1 },
         red: { groups: 0, units: 0, routed: 0, withFrequency: 0 },
@@ -186,5 +192,116 @@ describe.skipIf(lua === null)('Lua bridge – GUI hook', () => {
     const { sessions } = run('hookErrors');
     expect(sessions.map((s) => s.ev)).toEqual(['load', 'start']);
     expect(sessions[1]).toMatchObject({ running: true, mission: null, player: null });
+  });
+});
+
+describe.skipIf(lua === null)('Lua bridge – discovery chat (P1.7)', () => {
+  it('passes only [SLATE] lines on, marked when the server sent them', () => {
+    const chats = run('hookChat').datagrams.filter((d): d is BridgeChat => d.t === 'chat');
+    expect(chats.map((c) => [c.server, c.text.slice(0, 30)])).toEqual([
+      [true, '[SLATE] v1 lan 192.168.1.20:77'],
+      [false, '[SLATE] v1 lan 10.6.6.6:7790 c'],
+      [true, '[SLATE] v1 code RED-7K3Q9XPM'],
+      [true, '[SLATE] yyyyyyyyyyyyyyyyyyyyyy'],
+    ]);
+    expect(chats.at(-1)?.text.length).toBe(1000);
+    expect(chats.map((c) => [c.from, c.serverId])).toEqual([
+      [1, 1],
+      [7, 1],
+      [1, 1],
+      [1, 1],
+    ]);
+  });
+});
+
+describe.skipIf(lua === null)('Lua server hook (P1.7)', () => {
+  const FP = 'NZ5N-SEHR-0N1A-CA2G-QN0B-WFQE-30';
+  const lines = announcementLines({
+    codes: { blue: 'BLUE-7K3Q9XPM', red: 'RED-4H8W2NCD', group: 'SLATE-9F6T3RJB' },
+    fingerprint: FP,
+    publicAddress: 'slate-grp.dyndns.org:7790',
+    lanAddress: '192.168.1.20:7790',
+    maxLength: 80,
+  });
+
+  async function withServerFolder<T>(text: string | null, fn: (dir: string) => T): Promise<T> {
+    const dir = await mkdtemp(join(tmpdir(), 'slate-server-'));
+    try {
+      if (text !== null) {
+        await mkdir(join(dir, 'Scripts', 'SLATE'), { recursive: true });
+        await writeFile(join(dir, 'Scripts', 'SLATE', 'SLATE-announce.lua'), text);
+      }
+      return fn(dir);
+    } finally {
+      await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    }
+  }
+
+  it("sends a player his coalition's lines on join and slot change, throttled", async () => {
+    const out = await withServerFolder(announceFileText(lines), (dir) => run('server', dir));
+    const chat = out.lines.filter((l) => l.startsWith('CHAT ') || l.startsWith('MARK '));
+    const blue = lines.blue.map((l) => `CHAT 2 1 ${l}`);
+    const red = lines.red.map((l) => `CHAT 2 1 ${l}`);
+    // join (blue), 11 s later again, red at once, rejoin; nothing in single player
+    expect(chat).toEqual([...blue, ...blue, ...red, ...red, 'MARK single']);
+    expect(out.logs).toEqual([]);
+
+    // What the client's host makes of the split lines: the announcement again.
+    const reader = new AnnouncementReader();
+    const parsed = lines.red.map((l) => reader.feed(l, 0)).at(-1);
+    expect(parsed).toMatchObject({
+      code: 'RED-4H8W2NCD',
+      lan: '192.168.1.20:7790',
+      fingerprint: FP,
+    });
+  });
+
+  it('announces nothing while the relay is stopped', async () => {
+    const out = await withServerFolder(announceFileText(null), (dir) => run('server', dir));
+    expect(out.lines.filter((l) => l.startsWith('CHAT '))).toEqual([]);
+  });
+
+  it('keeps quiet without an announce file and with a broken net table', async () => {
+    const out = await withServerFolder(null, (dir) => run('serverNoFile', dir));
+    expect(out.lines.filter((l) => l.startsWith('CHAT '))).toEqual([]);
+    expect(out.logs).toHaveLength(1);
+    expect(out.logs[0]).toMatch(/server hook onPlayerChangeSlot: .*net broken/);
+  });
+
+  it('a broken announce file sends nothing', async () => {
+    const out = await withServerFolder('return { blue = { os.exit(1) } }', (dir) =>
+      run('server', dir),
+    );
+    expect(out.lines.filter((l) => l.startsWith('CHAT '))).toEqual([]);
+  });
+
+  it('starts the relay on a mission load when nothing answers on its port', async () => {
+    const start = autostartFileText({
+      exe: 'C:\\SLATE\\relay\\slate-relay.exe',
+      args: ['--data', 'C:\\SLATE\\relay\\data'],
+      port: 7790,
+    });
+    const dir = await mkdtemp(join(tmpdir(), 'slate-server-'));
+    try {
+      await mkdir(join(dir, 'Scripts', 'SLATE'), { recursive: true });
+      await writeFile(join(dir, 'Scripts', 'SLATE', 'SLATE-relay.lua'), start);
+      const out = run('serverAutostart', dir);
+      expect(out.lines.filter((l) => /^(PROBE|EXEC) /.test(l))).toEqual([
+        'PROBE 127.0.0.1 7790',
+        'EXEC start "slate-relay" /min "C:\\SLATE\\relay\\slate-relay.exe" "--data" "C:\\SLATE\\relay\\data"',
+        'PROBE 127.0.0.1 7790',
+        'PROBE 127.0.0.1 7790',
+      ]);
+      expect(out.logs).toEqual(['LOG starting slate-relay: C:\\SLATE\\relay\\slate-relay.exe']);
+    } finally {
+      await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    }
+  });
+
+  it('does nothing on a mission load without the autostart file', async () => {
+    const out = await withServerFolder(announceFileText(null), (dir) =>
+      run('serverAutostart', dir),
+    );
+    expect(out.lines.filter((l) => /^(PROBE|EXEC) /.test(l))).toEqual([]);
   });
 });

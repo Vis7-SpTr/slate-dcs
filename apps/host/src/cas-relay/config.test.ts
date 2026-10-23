@@ -14,7 +14,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'slate-relay-'));
 });
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe('loadRelayFiles', () => {
@@ -38,6 +38,27 @@ describe('loadRelayFiles', () => {
     await writeFile(path, JSON.stringify({ ...config, port: 7800, codes }));
     const files = await loadRelayFiles(dir);
     expect([files.port, files.codes]).toEqual([7800, codes]);
+  });
+
+  it('reads a relay.json from before P1.7: discovery off', async () => {
+    const first = await loadRelayFiles(dir);
+    const path = join(dir, 'relay.json');
+    expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({
+      dcsServerFolder: null,
+      lanAddress: null,
+      announceMaxLength: null,
+    });
+    await writeFile(
+      path,
+      JSON.stringify({ port: 7790, codes: first.codes, publicAddress: 'x.dyndns.org' }),
+    );
+    expect(await loadRelayFiles(dir)).toMatchObject({
+      publicAddress: 'x.dyndns.org',
+      dcsServerFolder: null,
+      lanAddress: null,
+      announceMaxLength: null,
+      autoStartWithDcs: true,
+    });
   });
 
   it('refuses bad codes with a readable message', async () => {

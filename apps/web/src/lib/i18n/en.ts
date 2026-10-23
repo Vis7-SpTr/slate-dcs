@@ -121,6 +121,31 @@ export const en = {
 
   // More → Settings
   'settings.title': 'Settings',
+  'app.title': 'SLATE',
+  'app.updates': 'Updates',
+  'app.notInstalled':
+    'Updates and uninstall come with the installed SLATE – this is a development or test build.',
+  'app.update.unsupported': 'Not available',
+  'app.update.idle': 'Not checked yet',
+  'app.update.checking': 'Looking for updates…',
+  'app.update.upToDate': 'SLATE is up to date',
+  'app.update.available': 'Version {version} is available',
+  'app.update.downloading': 'Downloading {version} – {progress} %',
+  'app.update.failed': 'No update information',
+  'app.update.checked': 'Checked {age} ago',
+  'app.update.checkedNow': 'Checked just now',
+  'app.update.check': 'Check now',
+  'app.update.install': 'Install {version}',
+  'app.update.afterMission': 'Installs after the mission – SLATE never updates during one.',
+  'app.runtime': 'Running',
+  'app.quit': 'Quit SLATE',
+  'app.quit.help':
+    'SLATE runs without a window. Quit ends it for every screen; start it again from the Start menu.',
+  'app.uninstall': 'Uninstall',
+  'app.uninstall.help':
+    "Removes SLATE, its Lua files and Export.lua line in every DCS folder, and the LAN firewall rule. 'Uninstall' keeps your data (Export.lua backups, saved relays, paired devices) for a reinstall; 'wipe' deletes it too.",
+  'app.uninstall.keep': 'Uninstall',
+  'app.uninstall.wipe': 'Uninstall and wipe data',
   'settings.time': 'Time display',
   'settings.time.help': 'All times are DCS mission time, shown as Zulu or local.',
   'settings.time.zulu': 'Zulu',
@@ -136,7 +161,6 @@ export const en = {
   'speed.gs': 'Ground speed',
   'speed.mach': 'Mach',
   'speed.vs': 'Vertical speed',
-  'settings.about': 'About',
   'settings.build': 'Version',
   'settings.hostBuild': 'Host version',
   'settings.screen': 'This screen',
@@ -192,6 +216,36 @@ export const en = {
   'dcs.action.rescan': 'Check again',
   'action.confirm': 'CONFIRM',
 
+  // More → Settings → Screens on your network (P1.8)
+  'lan.title': 'Screens on your network',
+  'lan.help':
+    'Use SLATE on an iPad, a phone or another PC on your home network. Only devices you pair can see or change anything; screens on this PC need no pairing.',
+  'lan.off': 'Off',
+  'lan.on': 'On',
+  'lan.addresses': 'This PC',
+  'lan.firewall': 'Windows Firewall',
+  'lan.firewall.ok': 'rule set (private networks)',
+  'lan.firewall.missing':
+    'Windows Firewall may block other devices. SLATE can add a rule for TCP {port} on private networks – Windows asks once.',
+  'lan.firewall.add': 'Add firewall rule',
+  'lan.firewall.public':
+    'Windows treats this network as Public, so other devices are blocked. Set it to Private in Windows Settings → Network → your network → Network profile.',
+  'lan.pair': 'Pair a device',
+  'lan.pair.button': 'Pair a device',
+  'lan.pair.at': 'Pair via {address}',
+  'lan.pair.scan': 'Scan this with the camera of the iPad or phone and open the link.',
+  'lan.pair.valid': 'Works once, for {time} more.',
+  'lan.pair.cancel': 'Cancel',
+  'lan.pair.addressNote':
+    'Devices are paired to this address. If it changes, pair them again – a fixed address for this PC in your router avoids that.',
+  'lan.qr': 'QR code for pairing',
+  'lan.devices': 'Paired devices',
+  'lan.device.paired': 'paired {date}',
+  'lan.device.connected': 'connected now',
+  'lan.device.seen': 'last seen {age} ago',
+  'lan.device.remove': 'Remove',
+  'lan.device.removeAll': 'Remove all',
+
   // More → Session (P1.6c)
   'session.title': 'Session',
   'session.state.notJoined': 'Not in a session',
@@ -214,6 +268,12 @@ export const en = {
   'session.role.jtac': 'JTAC',
   'session.joinButton': 'Join',
   'session.joinOwn': 'Join my session',
+  'session.announced.title': 'Announced by the DCS server',
+  'session.announced.help':
+    'The server you are on runs a SLATE relay for the {coalition} coalition. SLATE joins it by itself when you are in no session.',
+  'session.announced.join': "Join the server's session",
+  'session.announced.inIt': 'You are in this session.',
+  'session.announced.needNick': 'Enter the name shown to others first.',
   'session.fp.title': 'Check the relay fingerprint',
   'session.fp.help':
     'Compare it with the one the relay owner sees (relay window, or Host a session). Join only if they match.',

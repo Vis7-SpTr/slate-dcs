@@ -95,6 +95,8 @@ export const Command = z.discriminatedUnion('cmd', [
     }),
   ),
   command('session.leave', Empty),
+  /** Joins the session the DCS server announced (P1.7) – the button when not joined automatically. */
+  command('session.joinAnnounced', z.object({ nick: Nick, role: RoleId })),
   // Host mode (P1.6c) – host only: run a relay for the group on this PC.
   command('session.host', z.object({ enabled: z.boolean() })),
   // Flights (§7) – forwarded to the relay unchanged.
@@ -115,6 +117,22 @@ export const Command = z.discriminatedUnion('cmd', [
   command('dcs.install', z.object({ folder: z.string().min(1) })),
   command('dcs.repair', z.object({ folder: z.string().min(1) })),
   command('dcs.remove', z.object({ folder: z.string().min(1) })),
+  // LAN access and pairing (P1.8) – host only.
+  command('lan.set', z.object({ enabled: z.boolean() })),
+  /** Opens a pairing for one of `host.lan.addresses`: a single-use QR link, 5 minutes. */
+  command('lan.pair', z.object({ address: z.string().min(1) })),
+  command('lan.cancelPair', Empty),
+  command('lan.removeDevice', z.object({ id: z.string().min(1) })),
+  command('lan.removeAll', Empty),
+  /** Windows: adds the firewall rule for the port on the Private profile (one UAC prompt). */
+  command('lan.addFirewallRule', Empty),
+  // The app (P1.9) – host only. Updates never install while a mission runs.
+  command('app.checkUpdate', Empty),
+  command('app.installUpdate', Empty),
+  /** Ends SLATE (it runs without a window). Only from a screen on this PC. */
+  command('app.quit', Empty),
+  /** Runs the Windows uninstaller; `wipe` also deletes %APPDATA%\SLATE. Only from a screen on this PC. */
+  command('app.uninstall', z.object({ wipe: z.boolean() })),
   // Settings – host only.
   command(
     'settings.set',

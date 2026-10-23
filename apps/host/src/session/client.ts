@@ -3,7 +3,9 @@
 // `session`, `flight` and `traffic` slices up to date from what the relay
 // sends, sends the own status package by the interval rule (§6.3) and the own
 // slot changes (`session.update`, §5), runs the relay commands of the screens
-// and rejoins with its token when the link drops.
+// and rejoins with its token when the link drops. A join from the server's
+// announcement (discovery, §2) tries the LAN address first, then the public
+// one, and follows a coalition change with `session.switch` (§5).
 
 import {
   parseMessageText,
@@ -61,6 +63,24 @@ const JTAC_SLOTS = new Set(['forward_observer', 'artillery_commander', 'observer
 /** Reconnect delays after the link drops, then the last one again. */
 const RECONNECT_MS = [1000, 2000, 5000, 10_000, 20_000, 30_000];
 
+/** A join started by the host from the server's announcement (P1.7). */
+export interface DiscoveryTarget {
+  /** Tried in this order: the LAN address first, then the public one. */
+  addresses: string[];
+  /** Token and fingerprint are kept under this one address (the public one, if any). */
+  key: string;
+}
+
+interface Target {
+  join: JoinArgs;
+  /** Dial candidates, in order (one for a manual join). */
+  addresses: string[];
+  /** Address the token and fingerprint are stored under. */
+  key: string;
+  local: Relay | null;
+  source: 'manual' | 'discovery';
+}
+
 interface Joined {
   link: ClientLink;
   address: string;
@@ -87,7 +107,9 @@ export class RelayClient {
   readonly #dial: typeof dialWss;
   #joined: Joined | null = null;
   /** The session being kept: set from join until leave, so a drop rejoins. */
-  #target: { join: JoinArgs; address: string; local: Relay | null } | null = null;
+  #target: Target | null = null;
+  /** Relay key of a discovery session the user left on purpose (no auto-join back). */
+  #declined: string | null = null;
   #lastSeq: number | null = null;
   #pending = new Map<string, Pending>();
   #lastSent: { sample: StatusSample; at: number } | null = null;
@@ -110,17 +132,67 @@ export class RelayClient {
     return this.#joined?.own ?? false;
   }
 
+  /** The session being kept (joined, joining or rejoining), for discovery. */
+  get target(): { key: string; source: 'manual' | 'discovery'; code: string } | null {
+    const t = this.#target;
+    return t ? { key: t.key, source: t.source, code: t.join.code } : null;
+  }
+
+  /** Relay key of a discovery session the user left on purpose, if any. */
+  get declined(): string | null {
+    return this.#declined;
+  }
+
   /**
-   * `session.join` from a screen (§14.7). `local` = this host's own relay
-   * (host mode): joined directly, no fingerprint needed.
+   * `session.join` from a screen (§14.7), or from discovery with `discovery`
+   * set. `local` = this host's own relay (host mode): joined directly, no
+   * fingerprint needed.
    */
-  async join(args: JoinArgs, local: Relay | null): Promise<CommandOutcome> {
+  async join(
+    args: JoinArgs,
+    local: Relay | null,
+    discovery: DiscoveryTarget | null = null,
+  ): Promise<CommandOutcome> {
     if (this.#target) await this.leave();
-    const address = normalizeAddress(args.address);
-    this.#target = { join: args, address, local };
+    this.#declined = null;
+    const addresses = discovery
+      ? discovery.addresses.map(normalizeAddress)
+      : [normalizeAddress(args.address)];
+    const key = discovery ? normalizeAddress(discovery.key) : (addresses[0] ?? '');
+    this.#target = {
+      join: args,
+      addresses,
+      key,
+      local,
+      source: discovery ? 'discovery' : 'manual',
+    };
     this.#attempt = 0;
-    this.#setSession({ state: 'connecting', relay: { address, name: null, own: local !== null } });
+    this.#setSession({
+      state: 'connecting',
+      relay: { address: addresses[0] ?? key, name: null, own: local !== null },
+    });
     return this.#connect(true);
+  }
+
+  /**
+   * Moves to another coalition's session on the same relay (§5), after a
+   * re-announce with the other code. While rejoining, the next join uses it.
+   */
+  async switchTo(code: string): Promise<CommandOutcome> {
+    const target = this.#target;
+    if (!target) return failed('notConnected', 'Not in a session');
+    if (target.join.code === code) return { ok: true };
+    const joined = this.#joined;
+    if (!joined) {
+      target.join = { ...target.join, code, coalition: null };
+      return { ok: true };
+    }
+    const outcome = await this.#request(joined, 'session.switch', { code });
+    if (outcome.ok && this.#target === target) {
+      target.join = { ...target.join, code, coalition: null };
+      joined.join = target.join;
+    }
+    return outcome;
   }
 
   /** `session.leave` (§5): deliberate exit; the token is kept for later. */
@@ -128,6 +200,7 @@ export class RelayClient {
     clearTimeout(this.#reconnectTimer);
     this.#epoch += 1;
     const joined = this.#joined;
+    if (this.#target?.source === 'discovery') this.#declined = this.#target.key;
     this.#joined = null;
     this.#target = null;
     this.#lastSeq = null;
@@ -205,9 +278,14 @@ export class RelayClient {
     const target = this.#target;
     if (!target) return failed('notConnected', 'Not joining');
     const epoch = ++this.#epoch;
-    const { address, join, local } = target;
-    const known = await this.#tokens.get(address);
+    const { join, local, key, source } = target;
+    const known = await this.#tokens.get(key);
     const accepted = join.fingerprint ?? known?.fingerprint ?? null;
+    if (first && source === 'discovery' && known && known.fingerprint !== accepted) {
+      this.#log.warn(
+        `The server announces another fingerprint for ${key} (was ${known.fingerprint}, now ${String(accepted)}) – using the announced one`,
+      );
+    }
     /** The fingerprint the relay showed (set during the TLS handshake). */
     const seen: { fp: string | null } = { fp: null };
     const events: LinkEvents = {
@@ -220,20 +298,39 @@ export class RelayClient {
     };
     this.#store.update({ host: { ...this.#store.get('host'), relay: { state: 'connecting' } } });
 
-    let link: ClientLink;
-    try {
-      link = local
-        ? await dialLocal(local, events)
-        : await this.#dial(
-            address,
-            (fp) => {
-              seen.fp = fp;
-              return fp === accepted;
-            },
-            events,
-          );
-    } catch (error) {
+    let link: ClientLink | null = null;
+    let address = target.addresses[0] ?? key;
+    let error: unknown = null;
+    const failures: string[] = [];
+    for (const candidate of target.addresses) {
+      address = candidate;
+      try {
+        link = local
+          ? await dialLocal(local, events)
+          : await this.#dial(
+              candidate,
+              (fp) => {
+                seen.fp = fp;
+                return fp === accepted;
+              },
+              events,
+            );
+        error = null;
+        break;
+      } catch (caught) {
+        error = caught;
+        if (epoch !== this.#epoch || caught instanceof FingerprintError) break;
+        failures.push(`${candidate}: ${caught instanceof Error ? caught.message : String(caught)}`);
+      }
+    }
+    if (link === null) {
       if (epoch !== this.#epoch) return failed('notConnected', 'Cancelled');
+      if (error instanceof FingerprintError && source === 'discovery') {
+        // The relay doesn't show what the server announced: never offered to accept.
+        const text = `The relay at ${address} doesn't show the fingerprint the server announced – not joined`;
+        this.#log.warn(text);
+        return this.#joinFailed(first, text);
+      }
       if (error instanceof FingerprintError) {
         // First manual connect, or a changed certificate: the user decides (§3.1).
         const changed = known?.fingerprint ?? null;
@@ -252,16 +349,12 @@ export class RelayClient {
           changed === null ? 'Confirm the relay fingerprint' : 'The relay fingerprint changed',
         );
       }
-      const text = error instanceof Error ? error.message : String(error);
+      const text = failures.length > 0 ? `Can't reach ${failures.join('; ')}` : 'No address';
       if (first) {
         this.#target = null;
-        this.#setSession({
-          state: 'notJoined',
-          relay: null,
-          error: `Can't reach ${address}: ${text}`,
-        });
+        this.#setSession({ state: 'notJoined', relay: null, error: text });
         this.#setRelayState('notConnected');
-        return failed('relayError', `Can't reach ${address}: ${text}`);
+        return failed('relayError', text);
       }
       this.#scheduleReconnect(text);
       return failed('relayError', text);
@@ -294,7 +387,7 @@ export class RelayClient {
       nick: join.nick,
       role,
       aircraft,
-      source: 'manual',
+      source,
     });
     if (epoch !== this.#epoch) return failed('notConnected', 'Cancelled');
     if (answer?.type !== 'session.joined') {
@@ -306,7 +399,7 @@ export class RelayClient {
     }
 
     const body = answer.body;
-    await this.#tokens.set(address, { fingerprint: seen.fp ?? accepted, token: body.token });
+    await this.#tokens.set(key, { fingerprint: seen.fp ?? accepted, token: body.token });
     this.#joined = {
       link,
       address,
@@ -330,7 +423,7 @@ export class RelayClient {
       error: null,
     });
     this.#log.info(
-      `${body.resumed ? 'Rejoined' : 'Joined'} the ${body.coalition} session on ${address} as ${body.pid}`,
+      `${body.resumed ? 'Rejoined' : 'Joined'} the ${body.coalition} session on ${address} as ${body.pid}${source === 'discovery' ? ' (from the server announcement)' : ''}`,
     );
     // Frames that came right behind session.joined (state, catch-up).
     for (const text of this.#early.splice(0)) this.#receive(text);
@@ -447,6 +540,19 @@ export class RelayClient {
     if (!joined) return;
     const now = this.#now();
     switch (message.type) {
+      case 'session.joined': {
+        // After a session.switch (§5): the new session's state follows.
+        const { coalition } = message.body;
+        if (coalition === joined.coalition) return;
+        joined.coalition = coalition;
+        this.#log.info(`Switched to the ${coalition} session on ${joined.address}`);
+        this.#setSession({ coalition, participants: [] });
+        this.#store.update({
+          flight: { own: null, open: [], status: [] },
+          traffic: { aircraft: [] },
+        });
+        return;
+      }
       case 'session.state': {
         const body = message.body;
         this.#lastSeq = Math.max(this.#lastSeq ?? 0, body.asOfSeq);
@@ -647,6 +753,7 @@ export class RelayClient {
         participants: [],
         fingerprintCheck: session.fingerprintCheck,
         error: null,
+        announced: session.announced,
       },
       flight: { own: null, open: [], status: [] },
       traffic: { aircraft: [] },

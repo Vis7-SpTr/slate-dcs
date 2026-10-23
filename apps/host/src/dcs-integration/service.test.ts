@@ -49,7 +49,7 @@ beforeEach(async () => {
     dispatcher.dispatch(`01JABD2K7Q0M3N4P5R6S7T${String(counter++).padStart(4, '0')}`, command);
 });
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 const folder = (name: string) => store.get('dcs').folders.find((f) => f.name === name);

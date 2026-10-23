@@ -88,7 +88,7 @@ beforeEach(async () => {
 afterEach(async () => {
   for (const client of clients.splice(0)) client.close();
   await server.close();
-  await rm(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 /** Joins after confirming the fingerprint, as the user would. */

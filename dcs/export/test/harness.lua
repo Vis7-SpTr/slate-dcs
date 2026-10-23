@@ -6,10 +6,15 @@
     DGRAM <json>        a datagram sent over UDP
     PEER <host> <port>  where the UDP socket points
     CHAIN <callback>    another tool's export callback was called
+    CHAT <to> <from> <text>  net.send_chat_to (server hook)
+    PROBE <host> <port>      TCP connect to see if the relay runs (server hook)
+    EXEC <command>           os.execute (server hook starting the relay)
     LOG <text>          a line written to dcs.log
     DONE                the scenario finished without raising
 
-  Usage: lua5.1 harness.lua <scenario>
+  Usage: lua5.1 harness.lua <scenario> [<Saved Games folder>]
+  The folder (default: dcs/export/) is what lfs.writedir() returns – the
+  server scenarios get a temporary one with the relay's announce file.
   Run from tests/lua-bridge.test.ts, which checks the datagrams against the
   host's schemas (packages/shared/src/bridge.ts).
 ]]
@@ -18,6 +23,8 @@ local scenario = arg[1] or ''
 local SEP = package.config:sub(1, 1)
 local here = (arg[0]:match('^(.*)[/\\]') or '.') .. SEP
 local ROOT = here .. '..' .. SEP -- dcs/export/, the "Saved Games\DCS\" of the test
+local SERVER_HOOK = here .. '..' .. SEP .. '..' .. SEP .. 'server-hook' .. SEP .. 'Scripts' .. SEP .. 'Hooks' .. SEP .. 'SLATE-server-hook.lua'
+local WRITEDIR = arg[2] and (arg[2]:gsub('[/\\]$', '') .. SEP) or ROOT
 
 -- ---------------------------------------------------------------------------
 -- Mocked DCS environment
@@ -25,9 +32,21 @@ local ROOT = here .. '..' .. SEP -- dcs/export/, the "Saved Games\DCS\" of the t
 local clock = 1000 -- real time, s
 local function advance(seconds) clock = clock + seconds end
 
-package.loaded['lfs'] = { writedir = function() return ROOT end }
+package.loaded['lfs'] = { writedir = function() return WRITEDIR end }
+local tcpAnswers = false -- does something listen on the probed TCP port?
 package.loaded['socket'] = {
     gettime = function() return clock end,
+    tcp = function()
+        return {
+            settimeout = function() end,
+            connect = function(_, host, port)
+                print('PROBE ' .. host .. ' ' .. tostring(port))
+                if tcpAnswers then return 1 end
+                return nil, 'connection refused'
+            end,
+            close = function() end,
+        }
+    end,
     udp = function()
         return {
             settimeout = function() end,
@@ -39,6 +58,7 @@ package.loaded['socket'] = {
 }
 log = {
     ERROR = 2,
+    INFO = 4,
     write = function(_, _, text) print('LOG ' .. text) end,
 }
 
@@ -189,6 +209,7 @@ local function installGui()
     }
     net = {
         get_my_player_id = function() return 4 end,
+        get_server_id = function() return 1 end,
         get_player_info = function(id)
             if id ~= 4 then return nil end
             return { name = 'VWA | Pilot', side = hookState.side, slot = hookState.slot, ucid = 'SECRET-UCID', ipaddr = '10.0.0.9' }
@@ -297,6 +318,89 @@ function scenarios.hookErrors()
     hookCallbacks.onMissionLoadEnd()
     hookCallbacks.onSimulationStart()
     simFrames(1)
+end
+
+-- Chat on a client: only [SLATE] lines are passed on, marked if the server sent them.
+function scenarios.hookChat()
+    installGui()
+    loadHook()
+    hookCallbacks.onMissionLoadEnd()
+    hookCallbacks.onSimulationStart()
+    hookCallbacks.onChatMessage('hello everyone', 7)
+    hookCallbacks.onChatMessage('[SLATE] v1 lan 192.168.1.20:7790 code BLUE-7K3Q9XPM fp NZ5N-SEHR-0N1A-CA2G-QN0B-WFQE-30', 1)
+    hookCallbacks.onChatMessage('[SLATE] v1 lan 10.6.6.6:7790 code BLUE-7K3Q9XPM fp NZ5N-SEHR-0N1A-CA2G-QN0B-WFQE-30', 7)
+    hookCallbacks.onChatMessage('Server: [SLATE] v1 code RED-7K3Q9XPM', 1)
+    hookCallbacks.onChatMessage(nil, 1)
+    hookCallbacks.onChatMessage(string.rep('x', 10) .. '[SLATE] ' .. string.rep('y', 2000), 1)
+end
+
+-- ---------------------------------------------------------------------------
+-- Server hook: dedicated server, players 2 (blue later red) and 3 (spectator)
+
+local serverState = { server = true, mp = true, sides = { [2] = 0, [3] = 0 } }
+
+local function installServer()
+    DCS = {
+        setUserCallbacks = function(cb) hookCallbacks = cb end,
+        getRealTime = function() return clock end,
+        isServer = function() return serverState.server end,
+        isMultiplayer = function() return serverState.mp end,
+    }
+    net = {
+        get_server_id = function() return 1 end,
+        get_player_info = function(id, attr)
+            if attr == 'side' then return serverState.sides[id] end
+            error('the hook should only read the side')
+        end,
+        send_chat_to = function(text, to, from)
+            print('CHAT ' .. tostring(to) .. ' ' .. tostring(from) .. ' ' .. text)
+        end,
+    }
+end
+
+function scenarios.server()
+    installServer()
+    dofile(SERVER_HOOK)
+    hookCallbacks.onPlayerStart(1) -- the server itself: nothing
+    hookCallbacks.onPlayerStart(3) -- spectator: nothing
+    serverState.sides[2] = 2
+    hookCallbacks.onPlayerStart(2) -- blue
+    hookCallbacks.onPlayerChangeSlot(2) -- another blue slot at once: not again
+    advance(11)
+    hookCallbacks.onPlayerChangeSlot(2) -- 11 s later: again
+    serverState.sides[2] = 1
+    hookCallbacks.onPlayerChangeSlot(2) -- red: at once
+    hookCallbacks.onPlayerDisconnect(2)
+    hookCallbacks.onPlayerStart(2) -- back: again
+    print('MARK single')
+    serverState.mp = false
+    hookCallbacks.onPlayerStart(2) -- single player: nothing
+end
+
+-- Autostart: mission loads on the server start the relay when nothing listens,
+-- not twice within a minute, and never when it already runs.
+function scenarios.serverAutostart()
+    installServer()
+    os.execute = function(command) print('EXEC ' .. command) return 0 end
+    dofile(SERVER_HOOK)
+    hookCallbacks.onMissionLoadEnd() -- nothing listens: start
+    hookCallbacks.onMissionLoadEnd() -- again at once: not twice
+    advance(61)
+    tcpAnswers = true
+    hookCallbacks.onMissionLoadEnd() -- it runs: nothing to do
+    tcpAnswers = false
+    serverState.mp = false
+    hookCallbacks.onMissionLoadEnd() -- single player: nothing
+end
+
+-- No announce file, or a broken one: no chat, no error reaches DCS.
+function scenarios.serverNoFile()
+    installServer()
+    dofile(SERVER_HOOK)
+    serverState.sides[2] = 2
+    hookCallbacks.onPlayerStart(2)
+    net.get_player_info = function() error('net broken') end
+    hookCallbacks.onPlayerChangeSlot(2)
 end
 
 local run = scenarios[scenario]

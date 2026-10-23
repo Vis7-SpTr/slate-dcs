@@ -12,9 +12,10 @@
 //   crash can't leave a half-written Export.lua.
 
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { mkdir, readdir, readFile, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { join, relative, resolve, sep } from 'node:path';
 
+import { writeFileAtomic } from '../fs-safe.js';
 import { blockState, removeBlock, withBlock } from './export-block.js';
 
 export { defaultDataDir } from '../data-dir.js';
@@ -73,16 +74,8 @@ async function readOrNull(path: string): Promise<Buffer | null> {
   }
 }
 
-async function atomicWrite(path: string, data: Buffer | string): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const temp = `${path}.slate-tmp`;
-  try {
-    await writeFile(temp, data);
-    await rename(temp, path);
-  } catch (error) {
-    await rm(temp, { force: true });
-    throw error;
-  }
+function atomicWrite(path: string, data: Buffer | string): Promise<void> {
+  return writeFileAtomic(path, data);
 }
 
 const stamp = (date: Date) => {

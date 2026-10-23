@@ -32,12 +32,12 @@ describe('startBridgeReceiver', () => {
       },
     });
     try {
-      await sendUdp(receiver.port, '{"t":"hello","bv":3,"env":"export"}');
-      await sendUdp(receiver.port, '{"t":"own","bv":3,"mt":1,"unit":"Ünit"}');
+      await sendUdp(receiver.port, '{"t":"hello","bv":4,"env":"export"}');
+      await sendUdp(receiver.port, '{"t":"own","bv":4,"mt":1,"unit":"Ünit"}');
       await done;
       expect(received).toEqual([
-        '{"t":"hello","bv":3,"env":"export"}',
-        '{"t":"own","bv":3,"mt":1,"unit":"Ünit"}',
+        '{"t":"hello","bv":4,"env":"export"}',
+        '{"t":"own","bv":4,"mt":1,"unit":"Ünit"}',
       ]);
     } finally {
       await receiver.close();

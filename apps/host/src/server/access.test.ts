@@ -16,7 +16,7 @@ describe('isAllowedHost', () => {
     ['another port', '127.0.0.1:7793'],
     ['no port', 'localhost'],
     ['a foreign name (DNS rebinding)', 'evil.example:7792'],
-    ['a LAN address (not yet, P1.8)', '192.168.1.20:7792'],
+    ['a LAN address on the localhost listener', '192.168.1.20:7792'],
     ['no Host header', undefined],
   ])('refuses %s', (_why, host) => {
     expect(isAllowedHost(host, 7792)).toBe(false);

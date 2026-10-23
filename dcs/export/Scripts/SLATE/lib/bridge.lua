@@ -11,7 +11,7 @@ local SEP = package.config:sub(1, 1)
 local M = {
     -- Bridge version (bv). Must equal BRIDGE_VERSION in
     -- packages/shared/src/bridge.ts; bump both whenever a datagram changes.
-    VERSION = 3,
+    VERSION = 4,
     -- UDP port of the SLATE host on 127.0.0.1 (protocol.md §0).
     port = 7791,
 }

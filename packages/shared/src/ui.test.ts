@@ -142,6 +142,12 @@ describe('commands (protocol.md §14.7)', () => {
     ['ownship.clearStation', { st: 3 }],
     ['ownship.setGun', { rounds: 300 }],
     ['ownship.setGun', null],
+    ['lan.set', { enabled: true }],
+    ['lan.pair', { address: '192.168.1.20:7792' }],
+    ['lan.cancelPair', {}],
+    ['lan.removeDevice', { id: 'd_3f2c1a' }],
+    ['lan.removeAll', {}],
+    ['lan.addFirewallRule', {}],
     ['session.host', { enabled: true }],
     ['session.host', { enabled: false }],
     [

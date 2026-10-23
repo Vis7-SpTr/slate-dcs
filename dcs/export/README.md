@@ -1,6 +1,6 @@
 # dcs/export – the SLATE Lua bridge (client side)
 
-Read-only Lua scripts that send the own aircraft's data and the mission state to the SLATE host on the same PC: JSON datagrams over UDP to `127.0.0.1:7791` (`protocol.md` §6.1, rules in `architecture.md` §1.1). Bridge version **3** (2: magnetic heading, 3: TAS, Mach, vertical speed – 21 Oct 2026) – the same number as `BRIDGE_VERSION` in `packages/shared/src/bridge.ts`.
+Read-only Lua scripts that send the own aircraft's data and the mission state to the SLATE host on the same PC: JSON datagrams over UDP to `127.0.0.1:7791` (`protocol.md` §6.1, rules in `architecture.md` §1.1). Bridge version **4** (2: magnetic heading, 3: TAS, Mach, vertical speed – 21 Oct 2026, 4: `chat` – server announcements, 23 Oct 2026) – the same number as `BRIDGE_VERSION` in `packages/shared/src/bridge.ts`.
 
 The folder mirrors `Saved Games\DCS\`, so installing is a copy of `Scripts\`:
 
@@ -12,7 +12,7 @@ The folder mirrors `Saved Games\DCS\`, so installing is a copy of `Scripts\`:
 | `Scripts/SLATE/lib/json.lua` | both | JSON encoder |
 | `test/harness.lua` | – (tests only, not installed) | Runs both scripts against a mocked DCS; used by `apps/host/src/dcs-bridge/lua-bridge.test.ts` |
 
-- **Read-only.** Only `LoGet*` getters plus `LoLoCoordinatesToGeoCoordinates` on the export side, only `DCS.get*` / `DCS.is*` / `net.get_*` in the hook. No chat, no commands, nothing that changes the mission.
+- **Read-only.** Only `LoGet*` getters plus `LoLoCoordinatesToGeoCoordinates` on the export side, only `DCS.get*` / `DCS.is*` / `net.get_*` and the `onChatMessage` callback in the hook (P1.7: received lines containing `[SLATE]` go to the host, marked if the server sent them; every other chat line stays in DCS). Never sends chat, no commands, nothing that changes the mission.
 - **Coexists** with SRS, Tacview, Helios etc.: the export script keeps and calls the previous export callbacks; the hook registers its own callbacks.
 - **Never breaks DCS:** every call is wrapped in `pcall`; at most 20 errors per session go to `dcs.log` (prefix `SLATE`).
 - **Never blocks:** fire-and-forget UDP, no waiting, no file writes.

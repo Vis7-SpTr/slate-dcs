@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Runs on every push and pull request: format, lint, typecheck, test (incl. Lua), build, licence checks.
+# Runs on every push and pull request: format, lint, typecheck, test (incl. Lua), build, a
+# release-build smoke test of the relay, licence checks.
 
 name: CI
 
@@ -40,5 +41,12 @@ jobs:
         env:
           SLATE_REQUIRE_LUA: '1'
       - run: pnpm build
+      # The release bundle and single executable still build and start (P1.9).
+      - run: node tools/release/build.mjs --what relay --target linux-x64
+      - run: |
+          mkdir -p /tmp/relay-smoke
+          timeout 10 dist/release/slate-relay-*-linux-x64/slate-relay --data /tmp/relay-smoke --port 7999 > /tmp/relay-smoke.log 2>&1 || true
+          cat /tmp/relay-smoke.log
+          grep -q 'listening on TCP 7999' /tmp/relay-smoke.log
       - run: pnpm check:spdx
       - run: pnpm check:licenses

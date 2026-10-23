@@ -20,6 +20,7 @@ import {
 } from '@slate-dcs/shared';
 import type {
   AircraftInfo,
+  BridgeChat,
   BridgeHello,
   BridgeMissionCheck,
   BridgeOwn,
@@ -52,6 +53,8 @@ export interface DcsBridgeOptions {
   staleAfterMs?: number;
   /** An own-ship summary goes to the log this often. */
   summaryIntervalMs?: number;
+  /** A `[SLATE]` chat line from the client hook (discovery, P1.7). */
+  onChat?: (chat: BridgeChat) => void;
 }
 
 type BridgeState = Slices['host']['bridge']['state'];
@@ -78,6 +81,7 @@ export class DcsBridge {
   readonly #publishIntervalMs: number;
   readonly #staleAfterMs: number;
   readonly #summaryIntervalMs: number;
+  readonly #onChat: ((chat: BridgeChat) => void) | undefined;
 
   #state: BridgeState = 'waiting';
   #version: number | null = null;
@@ -120,6 +124,7 @@ export class DcsBridge {
     this.#publishIntervalMs = options.publishIntervalMs ?? 500;
     this.#staleAfterMs = options.staleAfterMs ?? BRIDGE_TIMING.staleAfterSec * 1000;
     this.#summaryIntervalMs = options.summaryIntervalMs ?? 10_000;
+    this.#onChat = options.onChat;
     this.#lastOverridesJson = JSON.stringify(this.#store.get('ownship').overrides);
 
     // Manual overrides set by a command: rebuild the status right after the
@@ -193,6 +198,9 @@ export class DcsBridge {
         break;
       case 'missionCheck':
         this.#missionCheck(datagram);
+        break;
+      case 'chat':
+        this.#onChat?.(datagram);
         break;
     }
     this.#flushIfDirtyNow();

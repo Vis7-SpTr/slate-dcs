@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Bug report
+description: Something in SLATE doesn't work as it should
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: SLATE version
+      description: More → Settings → SLATE (and the relay version from its log, if it's about sessions)
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - App / UI
+        - DCS data (Lua bridge, More → DCS)
+        - Session / flight / relay
+        - Discovery (server announcement)
+        - LAN / iPad
+        - Installer / update / uninstall
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        `%APPDATA%\SLATE\logs\slate.log`, for DCS problems also the `SLATE` lines from `Saved Games\<DCS folder>\Logs\dcs.log`, for relay problems the relay's console output.
+        Remove session codes and addresses you don't want to share.
+      render: text
+  - type: input
+    id: setup
+    attributes:
+      label: Setup
+      description: DCS version, aircraft, single player or which kind of server, OpenKneeboard/browser/iPad

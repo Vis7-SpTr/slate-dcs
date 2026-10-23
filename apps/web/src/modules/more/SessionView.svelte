@@ -2,7 +2,9 @@
 <!--
   More → Session (ui-design.md §3, P1.6c): join a session by hand, check the
   relay fingerprint on the first connect, see who is in the session, leave;
-  and host mode – run a relay for the group on this PC.
+  the DCS server's announcement (P1.7) with "Join the server's session" when
+  SLATE didn't join it by itself; and host mode – run a relay for the group
+  on this PC.
 -->
 <script lang="ts">
   import { normalizeSessionCode, unitDisplayName } from '@slate-dcs/shared';
@@ -39,10 +41,28 @@
   /** The join sent after confirming the fingerprint – the first one only asked. */
   let acceptCommand: string | null = $state(null);
   let hostCommand: string | null = $state(null);
+  let announcedCommand: string | null = $state(null);
+
+  const announced = $derived(session?.announced ?? null);
+  /** Already in the announced session (same relay, same coalition)? */
+  const inAnnounced = $derived.by(() => {
+    if (!announced || !session?.relay || session.state === 'notJoined') return false;
+    const here = session.relay.address.toLowerCase();
+    const same = [announced.lan, announced.relay].some((a) => a?.toLowerCase() === here);
+    return same && session.coalition === announced.coalition;
+  });
+
+  function joinAnnounced(): void {
+    announcedCommand = host.send({
+      cmd: 'session.joinAnnounced',
+      args: { nick: nick.trim(), role },
+    });
+  }
   let leaveCommand: string | null = $state(null);
   const joining = $derived(
     host.pendingOf(joinCommand)?.state === 'pending' ||
-      host.pendingOf(acceptCommand)?.state === 'pending',
+      host.pendingOf(acceptCommand)?.state === 'pending' ||
+      host.pendingOf(announcedCommand)?.state === 'pending',
   );
 
   function join(fingerprint: string | null = null): void {
@@ -74,7 +94,44 @@
   }
 </script>
 
+{#snippet announcedCard(a: NonNullable<typeof announced>)}
+  <Card title={t('session.announced.title')}>
+    <p class="note">
+      {t('session.announced.help', { coalition: t(`coalition.${a.coalition}`) })}
+    </p>
+    <Row label={t('session.relay')} mono>
+      <span class="addrs">
+        {#each [a.lan, a.relay].filter(Boolean) as addr (addr)}
+          <span class="addr">{addr}</span>
+        {/each}
+      </span>
+    </Row>
+    <Row label={t('session.coalition')}>{t(`coalition.${a.coalition}`)}</Row>
+    {#if inAnnounced}
+      <p class="note ok">{t('session.announced.inIt')}</p>
+    {:else}
+      {#if nick.trim() === ''}
+        <p class="note amber">{t('session.announced.needNick')}</p>
+      {/if}
+      <div class="actions">
+        <button
+          type="button"
+          class="btn primary"
+          disabled={joining || nick.trim() === '' || session?.state === 'connecting'}
+          onclick={joinAnnounced}>{t('session.announced.join')}</button
+        >
+      </div>
+      <CommandStatus id={announcedCommand} />
+    {/if}
+  </Card>
+{/snippet}
+
 <div class="session">
+  <!-- Not in the announced session: the offer comes first; in it: after the session. -->
+  {#if announced && !inAnnounced && session?.state !== 'confirmFingerprint'}
+    {@render announcedCard(announced)}
+  {/if}
+
   <Card title={t('session.title')}>
     <p class="state" data-state={session?.state}>
       <span class="dot" aria-hidden="true"></span>{t(
@@ -238,6 +295,10 @@
     {/if}
   </Card>
 
+  {#if announced && inAnnounced}
+    {@render announcedCard(announced)}
+  {/if}
+
   <Card title={t('session.host')}>
     <p class="note">{t('session.host.help')}</p>
     {#if relayHost?.state === 'on' && relayHost.codes}
@@ -374,6 +435,20 @@
 
   .amber {
     color: var(--amber);
+  }
+
+  .ok {
+    color: var(--green);
+  }
+
+  /* One address per line (LAN first); a long hostname may still break. */
+  .addrs {
+    display: grid;
+    justify-items: end;
+  }
+
+  .addr {
+    overflow-wrap: anywhere;
   }
 
   .actions {

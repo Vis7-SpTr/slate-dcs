@@ -230,6 +230,15 @@ describe('presence, switch, leave (§5)', () => {
     expect(host.last('error')?.body.code).toBe('badCoalition');
   });
 
+  it('answers a switch to the own coalition without changing anything', () => {
+    const mate = joined('Mate');
+    const host = joined('Vis7');
+    const presences = mate.of('session.presence').length;
+    host.send('session.switch', { code: CODES.blue });
+    expect(host.last('session.joined')?.body).toMatchObject({ session: 'blue', resumed: true });
+    expect(mate.of('session.presence')).toHaveLength(presences);
+  });
+
   it('leaves on purpose: others see "left", the token can rejoin later', () => {
     const a = joined('Alpha');
     const b = joined('Bravo');

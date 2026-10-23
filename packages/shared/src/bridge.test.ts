@@ -140,9 +140,30 @@ describe('parseBridgeDatagram', () => {
     });
   });
 
-  it('reports unknown types (e.g. chat before P1.7)', () => {
-    const result = parseBridgeDatagram(text({ t: 'chat', bv: BRIDGE_VERSION, line: '[SLATE] …' }));
+  it('reports unknown types (from newer Lua files)', () => {
+    const result = parseBridgeDatagram(text({ t: 'radio', bv: BRIDGE_VERSION }));
     expect(result).toMatchObject({ ok: false, reason: 'unknownType' });
+  });
+
+  it('reads a chat line (P1.7)', () => {
+    const result = parseBridgeDatagram(
+      text({ t: 'chat', bv: BRIDGE_VERSION, text: '[SLATE] v1 …', server: true }),
+    );
+    expect(result).toEqual({
+      ok: true,
+      datagram: {
+        t: 'chat',
+        bv: BRIDGE_VERSION,
+        text: '[SLATE] v1 …',
+        server: true,
+        from: null,
+        serverId: null,
+      },
+    });
+    expect(parseBridgeDatagram(text({ t: 'chat', bv: BRIDGE_VERSION }))).toMatchObject({
+      ok: false,
+      reason: 'badDatagram',
+    });
   });
 
   it.each([

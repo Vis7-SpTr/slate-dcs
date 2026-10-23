@@ -4,13 +4,14 @@
 // files are created – random codes, a new certificate – and then kept, so the
 // codes and the fingerprint stay the same across restarts.
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 
 import { DEFAULT_PORTS } from '@slate-dcs/shared';
 import { z } from 'zod';
 
+import { writeFileAtomic } from '../fs-safe.js';
 import { codesValid, generateCodes } from './codes.js';
 import type { RelayCodes } from './codes.js';
 import { certificateDer, createCertificate, fingerprint } from './tls.js';
@@ -20,8 +21,20 @@ const ConfigFile = z.object({
   port: z.int().min(1).max(65535),
   /** Session codes (protocol.md §4.1); change them here to lock out old ones. */
   codes: z.object({ blue: z.string(), red: z.string(), group: z.string() }),
-  /** Public address for the discovery line (DynDNS hostname), if any (P1.7). */
+  /** Public address for the discovery line (DynDNS hostname with port), if any (P1.7). */
   publicAddress: z.string().min(1).nullable(),
+  /**
+   * The DCS server's Saved Games folder (e.g. `…\Saved Games\DCS.server`):
+   * the relay installs the server hook and the announcement there (P1.7).
+   * `null`: no discovery, players join by hand.
+   */
+  dcsServerFolder: z.string().min(1).nullable().default(null),
+  /** LAN address for the discovery line (`ip:port`); `null` = this PC's only LAN address. */
+  lanAddress: z.string().min(1).nullable().default(null),
+  /** Split the discovery line so no chat line is longer; `null` = one line (spike 3.5). */
+  announceMaxLength: z.int().min(40).nullable().default(null),
+  /** With `dcsServerFolder`: the DCS server starts this relay when it loads a mission. */
+  autoStartWithDcs: z.boolean().default(true),
 });
 
 export interface RelayFiles {
@@ -29,6 +42,10 @@ export interface RelayFiles {
   port: number;
   codes: RelayCodes;
   publicAddress: string | null;
+  dcsServerFolder: string | null;
+  lanAddress: string | null;
+  announceMaxLength: number | null;
+  autoStartWithDcs: boolean;
   certPem: string;
   keyPem: string;
   fingerprint: string;
@@ -45,10 +62,8 @@ async function readText(path: string): Promise<string | null> {
   }
 }
 
-async function writeNew(path: string, text: string): Promise<void> {
-  const temp = `${path}.slate-tmp`;
-  await writeFile(temp, text, { mode: 0o600 });
-  await rename(temp, path);
+function writeNew(path: string, text: string): Promise<void> {
+  return writeFileAtomic(path, text, { mode: 0o600 });
 }
 
 /** Reads the relay's files from `dir`, creating what's missing. */
@@ -60,7 +75,15 @@ export async function loadRelayFiles(dir: string): Promise<RelayFiles> {
   const configText = await readText(configPath);
   let config: z.infer<typeof ConfigFile>;
   if (configText === null) {
-    config = { port: DEFAULT_PORTS.relay, codes: generateCodes(), publicAddress: null };
+    config = {
+      port: DEFAULT_PORTS.relay,
+      codes: generateCodes(),
+      publicAddress: null,
+      dcsServerFolder: null,
+      lanAddress: null,
+      announceMaxLength: null,
+      autoStartWithDcs: true,
+    };
     await writeNew(configPath, `${JSON.stringify(config, null, 2)}\n`);
     created.push('relay.json');
   } else {
@@ -90,6 +113,10 @@ export async function loadRelayFiles(dir: string): Promise<RelayFiles> {
     port: config.port,
     codes: config.codes,
     publicAddress: config.publicAddress,
+    dcsServerFolder: config.dcsServerFolder,
+    lanAddress: config.lanAddress,
+    announceMaxLength: config.announceMaxLength,
+    autoStartWithDcs: config.autoStartWithDcs,
     certPem,
     keyPem,
     fingerprint: fingerprint(certificateDer(certPem)),

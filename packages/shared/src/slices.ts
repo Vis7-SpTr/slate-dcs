@@ -30,7 +30,72 @@ export type TimeDisplay = z.infer<typeof TimeDisplay>;
  */
 export const UiScale = z.number().min(0.5).max(3);
 
+/** A device paired by QR code (P1.8). It stays paired until removed (unused 90 days → dropped). */
+export const PairedDevice = z.object({
+  id: z.string().min(1),
+  /** From the device's browser, e.g. `iPad · Safari`. */
+  name: z.string().min(1),
+  pairedAt: EpochMs,
+  lastSeen: EpochMs,
+  /** `true` while one of its screens is connected. */
+  connected: z.boolean(),
+});
+export type PairedDevice = z.infer<typeof PairedDevice>;
+
+export const LanState = z.object({
+  /** The switch – remembered across restarts (decided 23 Oct 2026). */
+  enabled: z.boolean(),
+  /** `on` = listening on `addresses`; `failed` = see `error`. */
+  state: z.enum(['off', 'on', 'failed']),
+  port: z.int().positive(),
+  /** This PC's LAN IPv4 addresses with the port, e.g. `192.168.1.20:7792`. */
+  addresses: z.array(z.string().min(1)),
+  error: z.string().min(1).nullable(),
+  /**
+   * Windows Firewall (architecture.md §1.1): `ok` = SLATE's rule for the port on
+   * the *Private* profile exists; `missing`; `publicNetwork` = the network is set
+   * to *Public*, where the rule doesn't apply; `unknown` = not Windows or not checked.
+   */
+  firewall: z.enum(['ok', 'missing', 'publicNetwork', 'unknown']),
+  /** An open pairing: the URL for the QR code, single use, until `expiresAt`. */
+  pairing: z.object({ url: z.string().min(1), expiresAt: EpochMs }).nullable(),
+  devices: z.array(PairedDevice),
+});
+export type LanState = z.infer<typeof LanState>;
+
 /** `host`: the host process itself. */
+/**
+ * The installed app (P1.9). `installed` = installed with the SLATE installer
+ * (Velopack, Windows); `false` in development and for a test build – then
+ * updates and uninstall are not available.
+ */
+export const AppState = z.object({
+  installed: z.boolean(),
+  update: z.object({
+    /**
+     * `unsupported` (not installed); `idle` (not checked yet); `checking`;
+     * `upToDate`; `available` (`version` can be installed); `downloading`
+     * (`progress` in %); `failed` (`error` says why – e.g. the release feed
+     * can't be reached).
+     */
+    state: z.enum([
+      'unsupported',
+      'idle',
+      'checking',
+      'upToDate',
+      'available',
+      'downloading',
+      'failed',
+    ]),
+    /** Version of the available update. */
+    version: z.string().min(1).nullable(),
+    progress: z.int().min(0).max(100).nullable(),
+    checkedAt: EpochMs.nullable(),
+    error: z.string().min(1).nullable(),
+  }),
+});
+export type AppState = z.infer<typeof AppState>;
+
 export const HostSlice = z.object({
   /** Build version, e.g. `0.1.0+3f2c1ab` (§14.6). */
   build: z.string().min(1),
@@ -62,8 +127,10 @@ export const HostSlice = z.object({
     fingerprint: RelayFingerprint.nullable(),
     error: z.string().min(1).nullable(),
   }),
-  /** LAN access switch (P1.8). */
-  lan: z.object({ enabled: z.boolean() }),
+  /** LAN access (P1.8, architecture.md §1.1): other devices on the home network. */
+  lan: LanState,
+  /** The installed app (P1.9, architecture.md §1.2): installer, updates. */
+  app: AppState,
 });
 export type HostSlice = z.infer<typeof HostSlice>;
 
@@ -104,6 +171,20 @@ export const SessionSlice = z.object({
     .nullable(),
   /** Why the last join or the link failed, in words; `null` if fine. */
   error: z.string().min(1).nullable(),
+  /**
+   * The last SLATE announcement from the DCS server (P1.7, protocol.md §2),
+   * with the host time it arrived. Not a secret: the code is the coalition's.
+   */
+  announced: z
+    .object({
+      relay: z.string().min(1).nullable(),
+      lan: z.string().min(1).nullable(),
+      code: SessionCode,
+      coalition: Coalition,
+      fingerprint: RelayFingerprint,
+      receivedAt: EpochMs,
+    })
+    .nullable(),
 });
 export type SessionSlice = z.infer<typeof SessionSlice>;
 
@@ -295,7 +376,26 @@ export function defaultSlices(build: string): {
         fingerprint: null,
         error: null,
       },
-      lan: { enabled: false },
+      lan: {
+        enabled: false,
+        state: 'off',
+        port: 7792,
+        addresses: [],
+        error: null,
+        firewall: 'unknown',
+        pairing: null,
+        devices: [],
+      },
+      app: {
+        installed: false,
+        update: {
+          state: 'unsupported',
+          version: null,
+          progress: null,
+          checkedAt: null,
+          error: null,
+        },
+      },
     },
     session: {
       state: 'notJoined',
@@ -307,6 +407,7 @@ export function defaultSlices(build: string): {
       participants: [],
       fingerprintCheck: null,
       error: null,
+      announced: null,
     },
     flight: { own: null, open: [], status: [] },
     ownship: {

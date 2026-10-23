@@ -465,11 +465,14 @@ export class Relay {
       this.#error(member.conn, 'badCoalition', 'Switch with a coalition code', message.id);
       return;
     }
-    if (code.coalition === member.session) return;
-    this.#setPresence(member, 'left');
-    member.session = code.coalition;
-    member.lastPosition = null;
-    member.lastFull = null;
+    const same = code.coalition === member.session;
+    if (!same) {
+      this.#setPresence(member, 'left');
+      member.session = code.coalition;
+      member.lastPosition = null;
+      member.lastFull = null;
+    }
+    // Answered also when nothing changes, so the host's request doesn't time out.
     this.#direct(member.conn, {
       type: 'session.joined',
       from: RELAY_FROM,
@@ -484,6 +487,7 @@ export class Relay {
       },
       re: message.id,
     });
+    if (same) return;
     this.#sendState(member, null);
     this.#setPresence(member, 'online');
     this.#log?.info(`${this.#who(member)} switched to ${member.session}`);

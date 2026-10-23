@@ -9,7 +9,8 @@
 
   import Card from '../../components/Card.svelte';
   import CommandStatus from '../../components/CommandStatus.svelte';
-  import Row from '../../components/Row.svelte';
+  import AppCard from './AppCard.svelte';
+  import LanCard from './LanCard.svelte';
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
 
@@ -106,11 +107,9 @@
       <CommandStatus id={speedsCommand} />
     </Card>
 
-    <Card title={t('settings.about')}>
-      <Row label={t('settings.build')} mono>{__SLATE_BUILD__}</Row>
-      <Row label={t('settings.hostBuild')} mono>{host.view.hostBuild ?? t('value.none')}</Row>
-      <p class="help screen">{t('settings.screen.help')}</p>
-    </Card>
+    <LanCard />
+
+    <AppCard />
   {/if}
 </div>
 
@@ -126,10 +125,6 @@
     margin-bottom: 0.75rem;
     color: var(--text-dim);
     font-size: 0.9375rem;
-  }
-
-  .screen {
-    margin: 0.75rem 0 0;
   }
 
   .segmented,

@@ -1,0 +1,125 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Release (P1.9, architecture.md §1.2): on a version tag (v0.1.0) – the Windows
+# installer and update packages (Velopack) and the relay archives, published
+# as a GitHub release, which is also SLATE's update feed. Started by hand
+# (Actions → Release → Run workflow) it builds a test version and keeps
+# everything as run artifacts instead of publishing.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Test build version, e.g. 0.1.0-test.1'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VPK_VERSION: '1.2.161'
+
+jobs:
+  app:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # The tag must match package.json; a test build takes the version typed in.
+      - id: version
+        shell: bash
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            V="${GITHUB_REF_NAME#v}"
+            P="$(node -p "require('./package.json').version")"
+            if [ "$V" != "$P" ]; then echo "::error::Tag v$V but package.json says $P"; exit 1; fi
+          else
+            V="${{ inputs.version }}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - run: node tools/release/build.mjs --what app --target win-x64 --version ${{ steps.version.outputs.version }}
+
+      - shell: bash
+        run: |
+          dotnet tool install -g vpk --version "$VPK_VERSION"
+          echo "$USERPROFILE/.dotnet/tools" >> "$GITHUB_PATH"
+
+      # The previous release, so vpk can build a delta update.
+      - if: github.event_name == 'push'
+        continue-on-error: true
+        run: vpk download github --repoUrl "https://github.com/${{ github.repository }}" --token "${{ secrets.GITHUB_TOKEN }}" --outputDir releases
+
+      - shell: bash
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          vpk pack --packId SLATE --packVersion "$V" --packTitle SLATE --packAuthors Vis7 \
+            --packDir "dist/release/slate-$V-win-x64" --mainExe SLATE.exe --outputDir releases
+
+      - if: github.event_name == 'push'
+        shell: bash
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          PRE=""
+          case "$V" in *-*) PRE="--pre" ;; esac
+          vpk upload github --repoUrl "https://github.com/${{ github.repository }}" \
+            --token "${{ secrets.GITHUB_TOKEN }}" --publish $PRE \
+            --releaseName "SLATE $V" --tag "v$V" --outputDir releases
+
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: slate-${{ steps.version.outputs.version }}-windows
+          path: releases/
+
+  relay:
+    needs: app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # One Node version for all three: the blob is made by this Node and
+      # injected into the same version's Windows and Linux binaries.
+      - run: |
+          for target in win-x64 linux-x64 linux-arm64; do
+            node tools/release/build.mjs --what relay --target "$target" \
+              --version "${{ needs.app.outputs.version }}" --archive
+          done
+
+      - if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "v${{ needs.app.outputs.version }}" \
+            dist/release/slate-relay-*.zip dist/release/slate-relay-*.tar.gz --clobber
+
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: slate-relay-${{ needs.app.outputs.version }}
+          path: |
+            dist/release/slate-relay-*.zip
+            dist/release/slate-relay-*.tar.gz
