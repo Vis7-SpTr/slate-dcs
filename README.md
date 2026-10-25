@@ -11,7 +11,7 @@ SLATE is an independent fan project. It is not affiliated with or endorsed by Ea
 - **Own aircraft, live from DCS** – position, headings, speeds, fuel, weapons per station, countermeasures, the DCS mission clock (Zulu/local). Read through a small Lua bridge in your Saved Games folder.
 - **Sessions with your group** – join a relay with a session code, one session per coalition; see who is online; rejoin after a drop with the same identity.
 - **Flights** – create or join a flight (open, or private with a code), positions, lead and move-up rules, the flight's fuel, weapons and status age.
-- **Discovery** – on a DCS server that runs the relay, SLATE gets the relay address from the server's chat announcement and joins the right coalition by itself.
+- **Discovery** – on a DCS server that runs the relay or announces one hosted elsewhere, SLATE gets the relay address from the server's chat announcement and joins the right coalition by itself.
 - **Several screens** – the same live state on every screen: browser, OpenKneeboard, and paired devices on your LAN (pair an iPad with a QR code).
 - **Installer and updates** – per-user Windows installer, updates from GitHub Releases (never during a mission), clean uninstall.
 
@@ -34,7 +34,7 @@ Updates, *Quit* and *Uninstall* are in **More → Settings → SLATE**. The log 
 
 ## Running a relay for your group
 
-Download `slate-relay-<version>-<platform>` (Windows x64, Linux x64, Linux ARM64) from the release and follow the `README.txt` inside. In short: run it on the PC with your DCS server, forward one TCP port (7790), and set `dcsServerFolder` in `relay.json` – the relay then installs a small server hook that announces it in DCS chat and starts the relay with the DCS server.
+Download `slate-relay-<version>-<platform>` (Windows x64, Linux x64, Linux ARM64) from the release and follow the `README.txt` inside. In short: run it on the PC with your DCS server, forward one TCP port (7790), and set `dcsServerFolder` in `relay.json` – the relay then installs a small server hook that announces it in DCS chat and starts the relay with the DCS server. If no port can be opened on the DCS server's network, run the relay on another machine (a Raspberry Pi or a small VPS) and let the DCS server PC only announce it – `remoteRelay` in `relay.json`, see the `README.txt`; nothing then listens on the server PC.
 
 ## Reporting bugs
 

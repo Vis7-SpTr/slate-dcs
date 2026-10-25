@@ -217,7 +217,7 @@ describe.skipIf(lua === null)('Lua bridge – discovery chat (P1.7)', () => {
 describe.skipIf(lua === null)('Lua server hook (P1.7)', () => {
   const FP = 'NZ5N-SEHR-0N1A-CA2G-QN0B-WFQE-30';
   const lines = announcementLines({
-    codes: { blue: 'BLUE-7K3Q9XPM', red: 'RED-4H8W2NCD', group: 'SLATE-9F6T3RJB' },
+    codes: { blue: 'BLUE-7K3Q9XPM', red: 'RED-4H8W2NCD' },
     fingerprint: FP,
     publicAddress: 'slate-grp.dyndns.org:7790',
     lanAddress: '192.168.1.20:7790',

@@ -28,7 +28,8 @@ export interface Autostart {
 }
 
 export interface AnnounceInput {
-  codes: RelayCodes;
+  /** The coalition codes; the group code is never announced. */
+  codes: Pick<RelayCodes, 'blue' | 'red'>;
   fingerprint: string;
   publicAddress: string | null;
   lanAddress: string | null;
@@ -82,7 +83,8 @@ export function announceFileText(lines: { blue: string[]; red: string[] } | null
   const list = (items: string[]) =>
     items.length === 0 ? '{}' : `{\n    ${items.map(luaString).join(',\n    ')},\n  }`;
   return [
-    '-- Written by slate-relay at every start, emptied when it stops (P1.7).',
+    '-- Written by slate-relay at every start, emptied when it stops (P1.7);',
+    '-- for a relay hosted elsewhere (remoteRelay) written once and kept.',
     '-- Read by Scripts\\Hooks\\SLATE-server-hook.lua. Changes here are overwritten.',
     'return {',
     `  blue = ${list(lines?.blue ?? [])},`,

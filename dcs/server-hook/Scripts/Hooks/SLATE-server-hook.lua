@@ -12,8 +12,10 @@
   reads the line and joins the right session by itself.
 
   The lines come from Scripts\SLATE\SLATE-announce.lua, written by
-  slate-relay at every start and emptied when it stops. The file is read
-  again for every announcement, so a relay restart needs no mission restart.
+  slate-relay at every start and emptied when it stops – or, for a relay
+  hosted elsewhere (remoteRelay, 25 Oct 2026), written once and kept. The
+  file is read again for every announcement, so a relay restart needs no
+  mission restart.
 
   Autostart (decided 23 Oct 2026): when the server loads a mission and
   nothing answers on the relay's port, the hook starts slate-relay as

@@ -8,12 +8,13 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 
-import { DEFAULT_PORTS } from '@slate-dcs/shared';
+import { DEFAULT_PORTS, RelayAddress, RelayFingerprint, SessionCode } from '@slate-dcs/shared';
 import { z } from 'zod';
 
 import { writeFileAtomic } from '../fs-safe.js';
 import { codesValid, generateCodes } from './codes.js';
 import type { RelayCodes } from './codes.js';
+import type { RemoteRelay } from './remote.js';
 import { certificateDer, createCertificate, fingerprint } from './tls.js';
 
 const ConfigFile = z.object({
@@ -29,12 +30,30 @@ const ConfigFile = z.object({
    * `null`: no discovery, players join by hand.
    */
   dcsServerFolder: z.string().min(1).nullable().default(null),
-  /** LAN address for the discovery line (`ip:port`); `null` = this PC's only LAN address. */
+  /**
+   * LAN address for the discovery line (`ip:port`); `null` = this PC's only
+   * LAN address. With `remoteRelay`: the remote relay's LAN address if it is
+   * in the DCS server's LAN, else leave it `null`.
+   */
   lanAddress: z.string().min(1).nullable().default(null),
   /** Split the discovery line so no chat line is longer; `null` = one line (spike 3.5). */
   announceMaxLength: z.int().min(40).nullable().default(null),
   /** With `dcsServerFolder`: the DCS server starts this relay when it loads a mission. */
   autoStartWithDcs: z.boolean().default(true),
+  /**
+   * A relay hosted somewhere else (Raspberry Pi, VPS): the DCS server
+   * announces that one, and this slate-relay only installs the hook and the
+   * announcement, then exits – it listens on nothing. Copied from
+   * `slate-relay --print-remote` on that relay. `null` = announce this relay.
+   */
+  remoteRelay: z
+    .object({
+      address: RelayAddress,
+      codes: z.object({ blue: SessionCode, red: SessionCode }),
+      fingerprint: RelayFingerprint,
+    })
+    .nullable()
+    .default(null),
 });
 
 export interface RelayFiles {
@@ -46,6 +65,7 @@ export interface RelayFiles {
   lanAddress: string | null;
   announceMaxLength: number | null;
   autoStartWithDcs: boolean;
+  remoteRelay: RemoteRelay | null;
   certPem: string;
   keyPem: string;
   fingerprint: string;
@@ -83,6 +103,7 @@ export async function loadRelayFiles(dir: string): Promise<RelayFiles> {
       lanAddress: null,
       announceMaxLength: null,
       autoStartWithDcs: true,
+      remoteRelay: null,
     };
     await writeNew(configPath, `${JSON.stringify(config, null, 2)}\n`);
     created.push('relay.json');
@@ -117,6 +138,7 @@ export async function loadRelayFiles(dir: string): Promise<RelayFiles> {
     lanAddress: config.lanAddress,
     announceMaxLength: config.announceMaxLength,
     autoStartWithDcs: config.autoStartWithDcs,
+    remoteRelay: config.remoteRelay,
     certPem,
     keyPem,
     fingerprint: fingerprint(certificateDer(certPem)),
