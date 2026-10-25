@@ -20,6 +20,8 @@ export interface AoListener {
   left?(member: Member, ao: AoRec, stays: boolean): void;
   /** The AO closed: its last JTAC went off-station. Everything tied to it goes. */
   closed?(ao: AoRec): void;
+  /** A JTAC of the AO was lost or came back (missions move their command, §10.2). */
+  presence?(member: Member, ao: AoRec): void;
 }
 
 type Fail = (code: ErrorCode, text: string) => void;
@@ -207,8 +209,12 @@ export class Aos {
   presenceChanged(member: Member, presence: Member['presence'], skip: Member | null): void {
     const ao = member.ao;
     if (!ao) return;
-    if (presence === 'left') this.leave(member, null, false);
-    else this.#updated(ao, null, skip);
+    if (presence === 'left') {
+      this.leave(member, null, false);
+      return;
+    }
+    this.#updated(ao, null, skip);
+    for (const listener of this.#listeners) listener.presence?.(member, ao);
   }
 
   /**

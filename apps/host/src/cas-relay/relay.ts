@@ -16,6 +16,7 @@ import { CheckIns } from './checkins.js';
 import { Flights } from './flights.js';
 import { Holds } from './holds.js';
 import { MapEntries } from './map-entries.js';
+import { Missions } from './missions.js';
 import { Sessions } from './sessions.js';
 import { StatusRouter } from './status.js';
 
@@ -56,7 +57,6 @@ type JoinedMessage = Exclude<
       | 'fm.updated'
       | 'fm.deleted'
       | 'log.entries'
-      | `fm.${string}`
       | 'log.request';
   }
 >;
@@ -68,6 +68,7 @@ export class Relay {
   readonly #entries: MapEntries;
   readonly #checkIns: CheckIns;
   readonly #holds: Holds;
+  readonly #missions: Missions;
   readonly #sessions: Sessions;
   readonly #status: StatusRouter;
 
@@ -79,10 +80,12 @@ export class Relay {
     const parts = { aos: this.#aos, flights: this.#flights, entries: this.#entries };
     this.#checkIns = new CheckIns(this.#core, parts);
     this.#holds = new Holds(this.#core, { ...parts, checkIns: this.#checkIns });
+    this.#missions = new Missions(this.#core, { ...parts, checkIns: this.#checkIns });
     this.#sessions = new Sessions(this.#core, {
       ...parts,
       checkIns: this.#checkIns,
       holds: this.#holds,
+      missions: this.#missions,
     });
     this.#status = new StatusRouter(this.#core, {
       flights: this.#flights,
@@ -118,6 +121,7 @@ export class Relay {
   /** Lost detection and token expiry; the transport calls it about once a second. */
   tick(): void {
     this.#sessions.tick();
+    this.#missions.tick();
   }
 
   /** Ends every connection with `session.closed` (`shutdown`). */
@@ -187,32 +191,7 @@ export class Relay {
       case 'session.join':
         this.#sessions.join(conn, message);
         return;
-      // Built in P2.3–P2.4; until then a host gets a clear answer.
-      case 'fm.create':
-      case 'fm.update':
-      case 'fm.assign':
-      case 'fm.unassign':
-      case 'fm.brief':
-      case 'fm.readbackCorrect':
-      case 'fm.ackChange':
-      case 'fm.spi':
-      case 'fm.correlated':
-      case 'fm.clear':
-      case 'fm.window':
-      case 'fm.windowRevoke':
-      case 'fm.waitingBda':
-      case 'fm.abort':
-      case 'fm.voiceOnly':
-      case 'fm.bda':
-      case 'fm.ackBda':
-      case 'fm.reattack':
-      case 'fm.complete':
-      case 'fm.cancel':
-      case 'fm.delete':
-      case 'fm.offerCommand':
-      case 'fm.acceptCommand':
-      case 'fm.returnCommand':
-      case 'fm.reclaim':
+      // Built in P2.4; until then a host gets a clear answer.
       case 'log.request':
         this.#core.error(
           conn,
@@ -340,6 +319,33 @@ export class Relay {
         return;
       case 'msg.received':
         this.#received(member, message);
+        return;
+      case 'fm.create':
+      case 'fm.update':
+      case 'fm.assign':
+      case 'fm.unassign':
+      case 'fm.brief':
+      case 'fm.readbackCorrect':
+      case 'fm.ackChange':
+      case 'fm.spi':
+      case 'fm.correlated':
+      case 'fm.clear':
+      case 'fm.window':
+      case 'fm.windowRevoke':
+      case 'fm.waitingBda':
+      case 'fm.abort':
+      case 'fm.voiceOnly':
+      case 'fm.bda':
+      case 'fm.ackBda':
+      case 'fm.reattack':
+      case 'fm.complete':
+      case 'fm.cancel':
+      case 'fm.delete':
+      case 'fm.offerCommand':
+      case 'fm.acceptCommand':
+      case 'fm.returnCommand':
+      case 'fm.reclaim':
+        this.#missions.command(member, message);
         return;
       default:
         // Every message type is handled; a new one fails to compile here.

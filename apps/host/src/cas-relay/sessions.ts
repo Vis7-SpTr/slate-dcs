@@ -14,6 +14,7 @@ import type { CheckIns } from './checkins.js';
 import type { Flights } from './flights.js';
 import type { Holds } from './holds.js';
 import type { MapEntries } from './map-entries.js';
+import type { Missions } from './missions.js';
 
 export class Sessions {
   readonly #core: RelayCore;
@@ -22,10 +23,18 @@ export class Sessions {
   readonly #entries: MapEntries;
   readonly #checkIns: CheckIns;
   readonly #holds: Holds;
+  readonly #missions: Missions;
 
   constructor(
     core: RelayCore,
-    parts: { flights: Flights; aos: Aos; entries: MapEntries; checkIns: CheckIns; holds: Holds },
+    parts: {
+      flights: Flights;
+      aos: Aos;
+      entries: MapEntries;
+      checkIns: CheckIns;
+      holds: Holds;
+      missions: Missions;
+    },
   ) {
     this.#core = core;
     this.#flights = parts.flights;
@@ -33,6 +42,7 @@ export class Sessions {
     this.#entries = parts.entries;
     this.#checkIns = parts.checkIns;
     this.#holds = parts.holds;
+    this.#missions = parts.missions;
   }
 
   hello(conn: Conn, message: Extract<Message, { type: 'hello' }>): void {
@@ -345,6 +355,7 @@ export class Sessions {
     const holds = this.#holds.visibleTo(member);
     const checkIns = this.#checkIns.viewsFor(member);
     const checkIn = member.flight?.checkIn ? this.#checkIns.view(member.flight.checkIn) : null;
+    const openMissions = this.#missions.openFor(member);
     member.presence = presence;
     const open = flights
       .all()
@@ -366,7 +377,7 @@ export class Sessions {
         mapEntries,
         holds,
         checkIns,
-        you: { flight: own, checkIn, openMissions: [] },
+        you: { flight: own, checkIn, openMissions },
       },
     });
     // Catch-up, sorted by seq: what he missed (if the relay still has all of

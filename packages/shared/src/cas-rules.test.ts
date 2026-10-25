@@ -286,7 +286,8 @@ describe('fire mission (§10.3, §10.4)', () => {
   });
 
   it.each([
-    ['lanes before the readback', { state: 'briefed' }],
+    ['a cleared lane before the readback', { state: 'briefed' }],
+    ['lanes on a draft', { state: 'draft', assignee: null }],
     ['an assigned mission without an assignee', { state: 'assigned', assignee: null, lanes: [] }],
     ['two lanes for one aircraft', { lanes: [lanes()[0], lanes()[0]] }],
     ['a command offer to the JTAC in command', { commandOffer: JTAC }],

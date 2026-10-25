@@ -36,7 +36,12 @@ export type MissionState = z.infer<typeof MissionState>;
 export const LaneState = z.enum(['open', 'correlated', 'cleared', 'waitingBda', 'bda']);
 export type LaneState = z.infer<typeof LaneState>;
 
-/** Mission states in which lanes exist. */
+/**
+ * Mission states in which lanes may have moved past `open`. Lanes are made at
+ * `assigned` (§10.3) and stay `open` until the readback is correct; a change
+ * to a read-back item sends the mission back to `briefed` and every lane to
+ * `open` (§10.5).
+ */
 export const LANE_STATES_OF_MISSION: ReadonlySet<MissionState> = new Set([
   'readbackCorrect',
   'complete',
@@ -315,7 +320,7 @@ export const FireMission = MissionContent.extend({
   state: MissionState,
   assignee: Assignee.nullable(),
   changes: z.array(MissionChange),
-  /** One per assigned aircraft from `readbackCorrect` on; a pilot gets only his own. */
+  /** One per assigned aircraft from `assigned` on, `open` until the readback; a pilot gets only his own. */
   lanes: z.array(Lane),
   window: Window.nullable(),
   voiceOnly: z.boolean(),
@@ -326,8 +331,14 @@ export const FireMission = MissionContent.extend({
   if (mission.state !== 'draft' && mission.assignee === null && mission.state !== 'cancelled') {
     ctx.addIssue({ code: 'custom', path: ['assignee'], message: 'Needs an assignee' });
   }
-  if (!LANE_STATES_OF_MISSION.has(mission.state) && mission.lanes.length > 0) {
-    ctx.addIssue({ code: 'custom', path: ['lanes'], message: 'Lanes start at readbackCorrect' });
+  if (mission.state === 'draft' && mission.lanes.length > 0) {
+    ctx.addIssue({ code: 'custom', path: ['lanes'], message: 'A draft has no lanes' });
+  }
+  if (
+    !LANE_STATES_OF_MISSION.has(mission.state) &&
+    mission.lanes.some((lane) => lane.state !== 'open')
+  ) {
+    ctx.addIssue({ code: 'custom', path: ['lanes'], message: 'Lanes stay open until readback' });
   }
   const pids = mission.lanes.map((lane) => lane.pid);
   if (new Set(pids).size !== pids.length) {
