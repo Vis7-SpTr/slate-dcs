@@ -36,6 +36,7 @@ export class StatusRouter {
       );
     }
     const body = message.body;
+    if (body.pos !== null) member.lastPos = { lat: body.pos.lat, lon: body.pos.lon };
     if (body.pos !== null) {
       const others = core
         .inSession(member.session)

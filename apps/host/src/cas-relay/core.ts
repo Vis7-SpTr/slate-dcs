@@ -11,8 +11,13 @@
 import { PROTOCOL_VERSION, ulid } from '@slate-dcs/shared';
 import type {
   AircraftInfo,
+  Altitude,
+  AoType,
   Coalition,
   ErrorCode,
+  Frequency,
+  LatLon,
+  MapEntry,
   Message,
   Participant,
   SessionJoin,
@@ -83,6 +88,10 @@ export interface Member {
   /** When he was last marked lost (for -1's move-up wait, §7.4). */
   lostAt: number | null;
   flight: FlightRec | null;
+  /** The AO a JTAC is on-station in – one at a time (§8.2). */
+  ao: AoRec | null;
+  /** Last position from his status (a JTAC's default AO centre, §8.2). */
+  lastPos: LatLon | null;
   /** Last `status.position` frame derived from his status, for the picture on join. */
   lastPosition: Frame | null;
   /** Last full `status.update` forwarded to his flight. */
@@ -110,6 +119,52 @@ export interface FlightRec {
   leadFreeSince: number | null;
 }
 
+/** One JTAC working an AO, in the order they joined (§8.3). */
+export interface AoJtacRec {
+  member: Member;
+  callsign: string;
+  /** When he joined the AO – relay time. */
+  since: number;
+  freqs: Frequency[];
+}
+
+/** An AO's area (§8.1): the fields its type doesn't use are `null`. */
+export interface AoArea {
+  type: AoType;
+  center: LatLon | null;
+  radiusM: number | null;
+  lengthM: number | null;
+  widthM: number | null;
+  headingDeg: number | null;
+  points: LatLon[] | null;
+  floor: Altitude;
+  ceiling: Altitude;
+}
+
+/** An AO as the relay keeps it (§8.1). Only the relay changes it. */
+export interface AoRec {
+  id: string;
+  joinCode: string;
+  session: Coalition;
+  name: string;
+  area: AoArea;
+  /** In the order they joined; the first online one is in command (§8.3). */
+  jtacs: AoJtacRec[];
+}
+
+/** A map entry as the relay keeps it (§8.4). */
+export interface CmRec {
+  entry: MapEntry;
+  session: Coalition;
+}
+
+/** The relay's mission clock for a session (§1.4): a host's `mt` and when it arrived. */
+export interface MissionClock {
+  mt: number;
+  /** Relay time when it arrived. */
+  at: number;
+}
+
 /** A message kept for resync, with who got it. */
 export interface LogEntry {
   seq: number;
@@ -122,6 +177,8 @@ export interface Session {
   seq: number;
   /** Recent messages with `seq`, oldest first, for resync. */
   log: LogEntry[];
+  /** The newest mission-time anchor from a host in this session (§1.4); `null` before any. */
+  clock: MissionClock | null;
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -142,8 +199,8 @@ export class RelayCore {
   readonly now: () => number;
   readonly #replayLimit: number;
   readonly sessions: Record<Coalition, Session> = {
-    blue: { id: 'blue', seq: 0, log: [] },
-    red: { id: 'red', seq: 0, log: [] },
+    blue: { id: 'blue', seq: 0, log: [], clock: null },
+    red: { id: 'red', seq: 0, log: [], clock: null },
   };
   readonly members = new Map<string, Member>();
   readonly byToken = new Map<string, Member>();
@@ -170,6 +227,22 @@ export class RelayCore {
       aircraft: member.aircraft ? { type: member.aircraft.type } : null,
       presence: member.presence,
     };
+  }
+
+  /**
+   * Keeps a host's mission time as the session's clock anchor (§1.4). The
+   * relay's own receive time is used, not the host's `ts`, so PC clock
+   * differences don't count.
+   */
+  anchor(session: Coalition, mt: number | null | undefined): void {
+    if (mt === null || mt === undefined) return;
+    this.sessions[session].clock = { mt, at: this.now() };
+  }
+
+  /** Mission time now on a session's clock (§1.4), or `null` without an anchor. */
+  missionTime(session: Coalition): number | null {
+    const clock = this.sessions[session].clock;
+    return clock === null ? null : clock.mt + (this.now() - clock.at) / 1000;
   }
 
   who(member: Member): string {

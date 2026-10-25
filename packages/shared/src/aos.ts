@@ -29,6 +29,10 @@ export const AO_RULES = {
   maxSizeM: 200 * NM,
   /** At most this many corners of a polygon AO. */
   maxPoints: 64,
+  /** Default floor: the surface (scope §4.2). */
+  defaultFloor: { m: 0, ref: 'sfc' },
+  /** Default ceiling until the JTAC sets one: FL200 (20 000 ft MSL). */
+  defaultCeiling: { m: 6096, ref: 'msl' },
 } as const;
 
 // ---------------------------------------------------------------------------

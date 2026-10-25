@@ -9,15 +9,21 @@ import type { Message } from '@slate-dcs/shared';
 import { newPid, newToken, readCode } from './codes.js';
 import { RELAY_FROM } from './core.js';
 import type { Conn, Member, RelayCore } from './core.js';
+import type { Aos } from './aos.js';
 import type { Flights } from './flights.js';
+import type { MapEntries } from './map-entries.js';
 
 export class Sessions {
   readonly #core: RelayCore;
   readonly #flights: Flights;
+  readonly #aos: Aos;
+  readonly #entries: MapEntries;
 
-  constructor(core: RelayCore, flights: Flights) {
+  constructor(core: RelayCore, parts: { flights: Flights; aos: Aos; entries: MapEntries }) {
     this.#core = core;
-    this.#flights = flights;
+    this.#flights = parts.flights;
+    this.#aos = parts.aos;
+    this.#entries = parts.entries;
   }
 
   hello(conn: Conn, message: Extract<Message, { type: 'hello' }>): void {
@@ -97,6 +103,8 @@ export class Sessions {
         conn: null,
         lostAt: null,
         flight: null,
+        ao: null,
+        lastPos: null,
         lastPosition: null,
         lastFull: null,
       };
@@ -108,6 +116,7 @@ export class Sessions {
     if (moved) this.setPresence(member, 'left');
 
     const typeChanged = member.aircraft?.type !== body.aircraft?.type;
+    const roleBefore = member.role;
     member.session = coalition;
     member.nick = body.nick;
     member.role = body.role;
@@ -117,6 +126,7 @@ export class Sessions {
     member.conn = conn;
     conn.member = member;
     if (moved) {
+      member.lastPos = null;
       member.lastPosition = null;
       member.lastFull = null;
     }
@@ -137,6 +147,8 @@ export class Sessions {
       flights.changed(flight, null, member);
     }
     if (flight && typeChanged) flights.listed(flight);
+    // Back in an aircraft slot: off-station (§8.2); the join codes he sees change.
+    this.#aos.roleChanged(member, roleBefore, null);
     core.log?.info(
       `${core.who(member)} ${resumed ? 'resumed' : 'joined'} (${body.source}${code.kind === 'group' ? ', group code' : ''})`,
     );
@@ -157,6 +169,7 @@ export class Sessions {
     if (!same) {
       this.setPresence(member, 'left');
       member.session = code.coalition;
+      member.lastPos = null;
       member.lastPosition = null;
       member.lastFull = null;
     }
@@ -187,6 +200,7 @@ export class Sessions {
     const flights = this.#flights;
     const body = message.body;
     const typeChanged = member.aircraft?.type !== body.aircraft?.type;
+    const roleBefore = member.role;
     member.nick = body.nick;
     member.role = body.role;
     member.aircraft = body.aircraft;
@@ -208,6 +222,8 @@ export class Sessions {
       core.inSession(member.session).filter((m) => m !== member),
       true,
     );
+    // An aircraft slot takes a JTAC off-station (§8.2).
+    this.#aos.roleChanged(member, roleBefore, message.id);
     const flight = member.flight;
     if (!flight) return;
     // Joining a JTAC slot leaves the flight (decided 21 Oct 2026).
@@ -300,6 +316,8 @@ export class Sessions {
       if (presence === 'left') this.#flights.remove(member, null, false);
       else this.#flights.changed(flight, null, skipFlight);
     }
+    // Left = off-station; lost or back changes the AO's command (§8.2, §8.3).
+    this.#aos.presenceChanged(member, presence, skipFlight);
     return true;
   }
 
@@ -313,6 +331,8 @@ export class Sessions {
     const presence = member.presence;
     member.presence = 'online';
     const own = member.flight ? flights.view(member.flight, member) : null;
+    const aos = this.#aos.views(member);
+    const mapEntries = this.#entries.visibleTo(member);
     member.presence = presence;
     const open = flights
       .all()
@@ -330,8 +350,8 @@ export class Sessions {
           ...members.map((m) => core.participant(m)),
         ],
         flights: own ? [...open, own] : open,
-        aos: [],
-        mapEntries: [],
+        aos,
+        mapEntries,
         holds: [],
         you: { flight: own, checkIn: null, openMissions: [] },
       },

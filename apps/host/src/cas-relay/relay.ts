@@ -11,7 +11,9 @@ import type { Coalition } from '@slate-dcs/shared';
 
 import { RATE, RelayCore } from './core.js';
 import type { Conn, Member, RelayConnection, RelayLink, RelayOptions } from './core.js';
+import { Aos } from './aos.js';
 import { Flights } from './flights.js';
+import { MapEntries } from './map-entries.js';
 import { Sessions } from './sessions.js';
 import { StatusRouter } from './status.js';
 
@@ -21,13 +23,21 @@ export type { RelayConnection, RelayLink, RelayLog, RelayOptions } from './core.
 export class Relay {
   readonly #core: RelayCore;
   readonly #flights: Flights;
+  readonly #aos: Aos;
+  readonly #entries: MapEntries;
   readonly #sessions: Sessions;
   readonly #status: StatusRouter;
 
   constructor(options: RelayOptions) {
     this.#core = new RelayCore(options);
     this.#flights = new Flights(this.#core);
-    this.#sessions = new Sessions(this.#core, this.#flights);
+    this.#aos = new Aos(this.#core);
+    this.#entries = new MapEntries(this.#core, this.#aos);
+    this.#sessions = new Sessions(this.#core, {
+      flights: this.#flights,
+      aos: this.#aos,
+      entries: this.#entries,
+    });
     this.#status = new StatusRouter(this.#core, this.#flights);
   }
 
@@ -69,6 +79,11 @@ export class Relay {
     }
   }
 
+  /** The session's mission time from the hosts' clock anchor (§1.4), or `null` without one. */
+  missionTime(session: Coalition): number | null {
+    return this.#core.missionTime(session);
+  }
+
   /** Counts for logs and tests. */
   stats(): Record<Coalition, { online: number; lost: number; flights: number }> & {
     connections: number;
@@ -104,6 +119,8 @@ export class Relay {
       return;
     }
     const message = parsed.message;
+    // Every host message may carry the sender's mission time (§1.4).
+    if (conn.member) this.#core.anchor(conn.member.session, message.mt);
 
     if (conn.state === 'new') {
       if (message.type !== 'hello') {
@@ -129,7 +146,13 @@ export class Relay {
       case 'flight.join':
       case 'flight.leave':
       case 'flight.move':
-      case 'flight.moveUp': {
+      case 'flight.moveUp':
+      case 'jtac.onStation':
+      case 'jtac.offStation':
+      case 'ao.update':
+      case 'cm.create':
+      case 'cm.update':
+      case 'cm.delete': {
         const member = conn.member;
         if (!member) {
           this.#core.error(conn, 'notJoined', 'Join a session first', message.id);
@@ -139,18 +162,18 @@ export class Relay {
         else if (message.type === 'session.update') this.#sessions.update(member, message);
         else if (message.type === 'session.leave') this.#sessions.leave(conn, member);
         else if (message.type === 'status.update') this.#status.route(member, message);
+        else if (message.type === 'jtac.onStation') this.#aos.onStation(member, message);
+        else if (message.type === 'jtac.offStation') this.#aos.offStation(member, message);
+        else if (message.type === 'ao.update') this.#aos.update(member, message);
+        else if (message.type === 'cm.create') this.#entries.create(member, message);
+        else if (message.type === 'cm.update') this.#entries.update(member, message);
+        else if (message.type === 'cm.delete') this.#entries.delete(member, message);
         else this.#flights.command(member, message);
         return;
       }
-      // Built in P2.1–P2.4; until then a host gets a clear answer.
+      // Built in P2.2–P2.4; until then a host gets a clear answer.
       case 'fuel.call':
       case 'msg.received':
-      case 'jtac.onStation':
-      case 'jtac.offStation':
-      case 'ao.update':
-      case 'cm.create':
-      case 'cm.update':
-      case 'cm.delete':
       case 'cas.checkIn':
       case 'cas.checkOut':
       case 'cas.release':

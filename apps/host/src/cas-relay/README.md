@@ -9,6 +9,8 @@ The SLATE relay (`protocol.md` §1–§7, CAS §8–§12 from P2): coalition ses
 | `sessions.ts` | Handshake, join with token check, coalition switch, slot updates, leaving, presence and expiry, the snapshot and catch-up on join (§3–§5). |
 | `status.ts` | Status routing (§6.4): the full package to the own flight, `status.position` to everyone else. |
 | `flights.ts` | Flights (§7): create, join, leave, move, move up, command, end of a flight. |
+| `aos.ts` | JTAC on-station and AOs (§8.1–§8.3, P2.1): new AO or join by code, command order, `ao.update`, off-station (also by leaving, switching, an aircraft slot, expiry), closing. The join code only for JTACs. Other parts hear about joins, off-station and closing (`AoListener`) and can add to the AO's audience (checked-in aircraft, P2.2). |
+| `map-entries.ts` | Control measures, markers and keyholes (§8.4, §8.5, P2.1): who may draw and change what, visibility (`ao` = the AO's audience), `hidden` when an entry disappears for someone, `inUse` checks (holds, missions – P2.2/P2.3). |
 | `codes.ts` | Session codes, participant IDs, tokens, flight IDs and private flight codes. |
 | `config.ts` | The relay's files: `relay.json` (port, codes, public address, discovery settings), `cert.pem`, `key.pem` – created on the first start. |
 | `tls.ts` | Self-signed certificate and its fingerprint (§3.1). |
@@ -17,4 +19,5 @@ The SLATE relay (`protocol.md` §1–§7, CAS §8–§12 from P2): coalition ses
 | `remote.ts` | A relay hosted somewhere else (25 Oct 2026): `--print-remote` prints the `remoteRelay` block; with `remoteRelay` set, the server PC only checks that relay, installs the hook and announces it, then exits – nothing listens there. |
 | `relay-harness.ts` | Tests only: in-memory hosts that check every relay frame against the shared schemas. |
 | `flights.test.ts` | Flights (§7), incl. -1 leaving or dropping out (§7.4). |
+| `aos.test.ts` | JTAC on-station, AO command, off-station rules, map entry visibility and rights, the mission-time anchor (P2.1). |
 | `simulation.test.ts` | 8 pilots + 2 JTACs + 1 red player over 10 simulated minutes, with drop-outs and rejoins; then the 8 pilots in two flights of 4. |

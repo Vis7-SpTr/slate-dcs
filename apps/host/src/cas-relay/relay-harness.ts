@@ -97,7 +97,11 @@ export class FakeHost {
     this.#conn.receive(text);
   }
 
-  send<T extends Message['type']>(type: T, body: Body<T>, extra: { ack?: boolean } = {}): string {
+  send<T extends Message['type']>(
+    type: T,
+    body: Body<T>,
+    extra: { ack?: boolean; mt?: number | null } = {},
+  ): string {
     const id = ulid();
     this.raw(
       JSON.stringify({
@@ -110,6 +114,7 @@ export class FakeHost {
         ts: Date.now(),
         ack: extra.ack ?? false,
         re: null,
+        ...(extra.mt === undefined ? {} : { mt: extra.mt }),
         body,
       }),
     );

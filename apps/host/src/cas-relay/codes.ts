@@ -74,7 +74,26 @@ export function newFlightId(taken: (id: string) => boolean): string {
   }
 }
 
-/** Private flight code, e.g. `K7Q-4XM` (§7.1): 6 Crockford base32 characters. */
+/** AO ID, e.g. `a_3a9c1e` (§8.1) – sent to everyone. */
+export function newAoId(taken: (id: string) => boolean): string {
+  for (;;) {
+    const id = `a_${randomBytes(3).toString('hex')}`;
+    if (!taken(id)) return id;
+  }
+}
+
+/** Map entry ID, e.g. `c_3a9c1e4f` (§8.4). */
+export function newCmId(taken: (id: string) => boolean): string {
+  for (;;) {
+    const id = `c_${randomBytes(4).toString('hex')}`;
+    if (!taken(id)) return id;
+  }
+}
+
+/**
+ * Private flight code or AO join code, e.g. `K7Q-4XM` (§7.1, §8.1): 6
+ * Crockford base32 characters.
+ */
 export function newPrivateCode(taken: (code: string) => boolean): string {
   for (;;) {
     let code = '';
