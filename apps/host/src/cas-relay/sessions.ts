@@ -10,7 +10,9 @@ import { newPid, newToken, readCode } from './codes.js';
 import { RELAY_FROM } from './core.js';
 import type { Conn, Member, RelayCore } from './core.js';
 import type { Aos } from './aos.js';
+import type { CheckIns } from './checkins.js';
 import type { Flights } from './flights.js';
+import type { Holds } from './holds.js';
 import type { MapEntries } from './map-entries.js';
 
 export class Sessions {
@@ -18,12 +20,19 @@ export class Sessions {
   readonly #flights: Flights;
   readonly #aos: Aos;
   readonly #entries: MapEntries;
+  readonly #checkIns: CheckIns;
+  readonly #holds: Holds;
 
-  constructor(core: RelayCore, parts: { flights: Flights; aos: Aos; entries: MapEntries }) {
+  constructor(
+    core: RelayCore,
+    parts: { flights: Flights; aos: Aos; entries: MapEntries; checkIns: CheckIns; holds: Holds },
+  ) {
     this.#core = core;
     this.#flights = parts.flights;
     this.#aos = parts.aos;
     this.#entries = parts.entries;
+    this.#checkIns = parts.checkIns;
+    this.#holds = parts.holds;
   }
 
   hello(conn: Conn, message: Extract<Message, { type: 'hello' }>): void {
@@ -333,6 +342,9 @@ export class Sessions {
     const own = member.flight ? flights.view(member.flight, member) : null;
     const aos = this.#aos.views(member);
     const mapEntries = this.#entries.visibleTo(member);
+    const holds = this.#holds.visibleTo(member);
+    const checkIns = this.#checkIns.viewsFor(member);
+    const checkIn = member.flight?.checkIn ? this.#checkIns.view(member.flight.checkIn) : null;
     member.presence = presence;
     const open = flights
       .all()
@@ -352,8 +364,9 @@ export class Sessions {
         flights: own ? [...open, own] : open,
         aos,
         mapEntries,
-        holds: [],
-        you: { flight: own, checkIn: null, openMissions: [] },
+        holds,
+        checkIns,
+        you: { flight: own, checkIn, openMissions: [] },
       },
     });
     // Catch-up, sorted by seq: what he missed (if the relay still has all of
@@ -369,10 +382,11 @@ export class Sessions {
       catchUp.push(...session.log.filter((e) => e.seq > lastSeq && e.to.has(member.pid)));
     }
     for (const other of members) {
-      const status =
-        member.flight && other.flight === member.flight
-          ? (other.lastFull ?? other.lastPosition)
-          : other.lastPosition;
+      // In full from his flight mates – and, for a JTAC, from the aircraft checked in to his AO.
+      const full =
+        (member.flight !== null && other.flight === member.flight) ||
+        (member.ao !== null && other.flight?.checkIn?.ao === member.ao);
+      const status = full ? (other.lastFull ?? other.lastPosition) : other.lastPosition;
       if (status) catchUp.push(status);
     }
     catchUp.sort((a, b) => a.seq - b.seq);

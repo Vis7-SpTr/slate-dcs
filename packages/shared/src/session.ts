@@ -115,6 +115,8 @@ export const SessionState = defineMessage(
     mapEntries: z.array(MapEntry).default([]),
     /** Holds this player may see (§9.4). */
     holds: z.array(Hold).default([]),
+    /** A JTAC's view: every check-in of his AO (§9.2); empty for pilots. */
+    checkIns: z.array(CheckIn).default([]),
     you: z.object({
       flight: Flight.nullable(),
       /** His flight's check-in – at most one (§9.2). */

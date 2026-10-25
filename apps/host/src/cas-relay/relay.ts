@@ -7,12 +7,14 @@
 // standalone (`slate-relay`) and inside a host (host mode).
 
 import { parseMessageText } from '@slate-dcs/shared';
-import type { Coalition } from '@slate-dcs/shared';
+import type { Coalition, Message } from '@slate-dcs/shared';
 
 import { RATE, RelayCore } from './core.js';
 import type { Conn, Member, RelayConnection, RelayLink, RelayOptions } from './core.js';
 import { Aos } from './aos.js';
+import { CheckIns } from './checkins.js';
 import { Flights } from './flights.js';
+import { Holds } from './holds.js';
 import { MapEntries } from './map-entries.js';
 import { Sessions } from './sessions.js';
 import { StatusRouter } from './status.js';
@@ -20,11 +22,52 @@ import { StatusRouter } from './status.js';
 export { RELAY_FROM } from './core.js';
 export type { RelayConnection, RelayLink, RelayLog, RelayOptions } from './core.js';
 
+/** Messages a host sends once it has joined a session. */
+type JoinedMessage = Exclude<
+  Message,
+  {
+    type:
+      | 'hello'
+      | 'session.join'
+      | 'relay.receipt'
+      | 'error'
+      | 'welcome'
+      | 'reject'
+      | 'session.joined'
+      | 'session.state'
+      | 'session.presence'
+      | 'session.updated'
+      | 'session.closed'
+      | 'status.position'
+      | 'flight.created'
+      | 'flight.updated'
+      | 'flight.listed'
+      | 'flight.closed'
+      | 'ao.created'
+      | 'ao.updated'
+      | 'ao.closed'
+      | 'cm.created'
+      | 'cm.updated'
+      | 'cm.deleted'
+      | 'cas.checkedIn'
+      | 'cas.checkedOut'
+      | 'cas.hold.updated'
+      | 'cas.hold.cancelled'
+      | 'fm.updated'
+      | 'fm.deleted'
+      | 'log.entries'
+      | `fm.${string}`
+      | 'log.request';
+  }
+>;
+
 export class Relay {
   readonly #core: RelayCore;
   readonly #flights: Flights;
   readonly #aos: Aos;
   readonly #entries: MapEntries;
+  readonly #checkIns: CheckIns;
+  readonly #holds: Holds;
   readonly #sessions: Sessions;
   readonly #status: StatusRouter;
 
@@ -33,12 +76,18 @@ export class Relay {
     this.#flights = new Flights(this.#core);
     this.#aos = new Aos(this.#core);
     this.#entries = new MapEntries(this.#core, this.#aos);
+    const parts = { aos: this.#aos, flights: this.#flights, entries: this.#entries };
+    this.#checkIns = new CheckIns(this.#core, parts);
+    this.#holds = new Holds(this.#core, { ...parts, checkIns: this.#checkIns });
     this.#sessions = new Sessions(this.#core, {
-      flights: this.#flights,
-      aos: this.#aos,
-      entries: this.#entries,
+      ...parts,
+      checkIns: this.#checkIns,
+      holds: this.#holds,
     });
-    this.#status = new StatusRouter(this.#core, this.#flights);
+    this.#status = new StatusRouter(this.#core, {
+      flights: this.#flights,
+      checkIns: this.#checkIns,
+    });
   }
 
   /** A new connection, before `hello`. */
@@ -138,51 +187,7 @@ export class Relay {
       case 'session.join':
         this.#sessions.join(conn, message);
         return;
-      case 'session.switch':
-      case 'session.update':
-      case 'session.leave':
-      case 'status.update':
-      case 'flight.create':
-      case 'flight.join':
-      case 'flight.leave':
-      case 'flight.move':
-      case 'flight.moveUp':
-      case 'jtac.onStation':
-      case 'jtac.offStation':
-      case 'ao.update':
-      case 'cm.create':
-      case 'cm.update':
-      case 'cm.delete': {
-        const member = conn.member;
-        if (!member) {
-          this.#core.error(conn, 'notJoined', 'Join a session first', message.id);
-          return;
-        }
-        if (message.type === 'session.switch') this.#sessions.switch(member, message);
-        else if (message.type === 'session.update') this.#sessions.update(member, message);
-        else if (message.type === 'session.leave') this.#sessions.leave(conn, member);
-        else if (message.type === 'status.update') this.#status.route(member, message);
-        else if (message.type === 'jtac.onStation') this.#aos.onStation(member, message);
-        else if (message.type === 'jtac.offStation') this.#aos.offStation(member, message);
-        else if (message.type === 'ao.update') this.#aos.update(member, message);
-        else if (message.type === 'cm.create') this.#entries.create(member, message);
-        else if (message.type === 'cm.update') this.#entries.update(member, message);
-        else if (message.type === 'cm.delete') this.#entries.delete(member, message);
-        else this.#flights.command(member, message);
-        return;
-      }
-      // Built in P2.2–P2.4; until then a host gets a clear answer.
-      case 'fuel.call':
-      case 'msg.received':
-      case 'cas.checkIn':
-      case 'cas.checkOut':
-      case 'cas.release':
-      case 'cas.sitUpdate':
-      case 'cas.sitCopy':
-      case 'cas.hold.assign':
-      case 'cas.hold.update':
-      case 'cas.hold.cancel':
-      case 'cas.hold.wilco':
+      // Built in P2.3–P2.4; until then a host gets a clear answer.
       case 'fm.create':
       case 'fm.update':
       case 'fm.assign':
@@ -245,8 +250,99 @@ export class Relay {
       case 'log.entries':
         this.#core.error(conn, 'forbidden', `Only the relay sends ${message.type}`, message.id);
         return;
+      default: {
+        const member = conn.member;
+        if (!member) {
+          this.#core.error(conn, 'notJoined', 'Join a session first', message.id);
+          return;
+        }
+        // Level 1 (§1.2): a receipt for every `ack` message that was taken without an error.
+        const errors = this.#core.errorCount;
+        this.#core.handling(member, message, () => {
+          this.#joined(conn, member, message);
+        });
+        if (message.ack && this.#core.errorCount === errors && conn.member === member) {
+          this.#core.receipt(member, message.id, this.#core.sessions[member.session].seq);
+        }
+      }
+    }
+  }
+
+  /** A message from a host that joined, by its part. */
+  #joined(conn: Conn, member: Member, message: JoinedMessage): void {
+    switch (message.type) {
+      case 'session.switch':
+        this.#sessions.switch(member, message);
+        return;
+      case 'session.update':
+        this.#sessions.update(member, message);
+        return;
+      case 'session.leave':
+        this.#sessions.leave(conn, member);
+        return;
+      case 'status.update':
+        this.#status.route(member, message);
+        return;
+      case 'flight.create':
+      case 'flight.join':
+      case 'flight.leave':
+      case 'flight.move':
+      case 'flight.moveUp':
+        this.#flights.command(member, message);
+        return;
+      case 'jtac.onStation':
+        this.#aos.onStation(member, message);
+        return;
+      case 'jtac.offStation':
+        this.#aos.offStation(member, message);
+        return;
+      case 'ao.update':
+        this.#aos.update(member, message);
+        return;
+      case 'cm.create':
+        this.#entries.create(member, message);
+        return;
+      case 'cm.update':
+        this.#entries.update(member, message);
+        return;
+      case 'cm.delete':
+        this.#entries.delete(member, message);
+        return;
+      case 'cas.checkIn':
+        this.#checkIns.checkIn(member, message);
+        return;
+      case 'cas.checkOut':
+        this.#checkIns.checkOut(member, message);
+        return;
+      case 'cas.release':
+        this.#checkIns.release(member, message);
+        return;
+      case 'cas.sitUpdate':
+        this.#checkIns.sitUpdate(member, message);
+        return;
+      case 'cas.sitCopy':
+        this.#checkIns.sitCopy(member, message);
+        return;
+      case 'fuel.call':
+        this.#checkIns.fuelCall(member, message);
+        return;
+      case 'cas.hold.assign':
+        this.#holds.assign(member, message);
+        return;
+      case 'cas.hold.update':
+        this.#holds.update(member, message);
+        return;
+      case 'cas.hold.cancel':
+        this.#holds.cancel(member, message);
+        return;
+      case 'cas.hold.wilco':
+        this.#holds.wilco(member, message);
+        return;
+      case 'msg.received':
+        this.#received(member, message);
+        return;
       default:
-        // Every message type is handled above; a new one fails to compile here.
+        // Every message type is handled; a new one fails to compile here.
         this.#core.error(
           conn,
           'unsupported',
@@ -254,6 +350,31 @@ export class Relay {
           null,
         );
     }
+  }
+
+  /**
+   * Level 2 (§1.2): a recipient's app got a message. It names the message it
+   * received; the relay passes it on to whoever sent the command behind it.
+   */
+  #received(member: Member, message: Extract<Message, { type: 'msg.received' }>): void {
+    const core = this.#core;
+    const target = message.re === null ? null : core.confirmation(message.re);
+    if (!target || target.sender === member.pid) return;
+    const sender = core.members.get(target.sender);
+    if (sender?.session !== member.session || sender.presence === 'left') return;
+    core.publish(
+      core.sessions[member.session],
+      {
+        type: 'msg.received',
+        from: member.pid,
+        session: member.session,
+        to: { scope: 'pid', id: sender.pid },
+        body: {},
+        re: target.command,
+      },
+      [sender],
+      true,
+    );
   }
 
   /** Token bucket per connection; over the limit → `rateLimited` (at most once a second). */

@@ -303,6 +303,18 @@ export {
 export { CAS_LOG_RULES, LogArea, LogEntries, LogEntry, LogRequest } from './cas-log.js';
 
 export {
+  blocksOverlap,
+  destination,
+  distanceM,
+  HOLD_TURN_RADIUS_M,
+  holdArea,
+  holdsConflict,
+  keyholePosition,
+  resolvePoint,
+} from './cas-geo.js';
+export type { HoldShapeInput, PointLookup } from './cas-geo.js';
+
+export {
   BRIEF_FIELDS,
   BriefField,
   CasLogSlice,

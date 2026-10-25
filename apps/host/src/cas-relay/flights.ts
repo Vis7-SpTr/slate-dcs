@@ -18,12 +18,27 @@ export type FlightCommand = Extract<
 
 type Fail = (code: ErrorCode, text: string) => void;
 
+/** What other parts need to know about flights (check-ins in P2.2, lanes in P2.3). */
+export interface FlightListener {
+  /** He joined the flight. */
+  joined?(member: Member, flight: FlightRec): void;
+  /** He left the flight, which goes on. */
+  left?(member: Member, flight: FlightRec): void;
+  /** The flight ended (§7.5) – told before `flight.closed` goes out. */
+  closed?(flight: FlightRec): void;
+}
+
 export class Flights {
   readonly #core: RelayCore;
   readonly #flights = new Map<string, FlightRec>();
+  readonly #listeners: FlightListener[] = [];
 
   constructor(core: RelayCore) {
     this.#core = core;
+  }
+
+  listen(listener: FlightListener): void {
+    this.#listeners.push(listener);
   }
 
   /** All flights, for counts and the session state. */
@@ -83,6 +98,7 @@ export class Flights {
       privateCode: body.open ? null : newPrivateCode((code) => codes.has(code)),
       slots: new Map([[1, member]]),
       leadFreeSince: null,
+      checkIn: null,
     };
     this.#flights.set(flight.id, flight);
     member.flight = flight;
@@ -131,6 +147,7 @@ export class Flights {
     member.flight = flight;
     this.changed(flight, re);
     this.listed(flight);
+    for (const listener of this.#listeners) listener.joined?.(member, flight);
     this.#core.log?.info(
       `${this.#core.who(member)} joined ${this.display(flight)} as -${String(pos)}`,
     );
@@ -155,6 +172,7 @@ export class Flights {
     const extra = tell ? [member] : [];
     if (flight.slots.size === 0) {
       this.#flights.delete(flight.id);
+      for (const listener of this.#listeners) listener.closed?.(flight);
       const to = flight.open ? [...this.#core.inSession(flight.session), ...extra] : extra;
       this.#core.publish(
         this.#core.sessions[flight.session],
@@ -174,6 +192,7 @@ export class Flights {
     }
     this.changed(flight, re, null, extra);
     this.listed(flight);
+    for (const listener of this.#listeners) listener.left?.(member, flight);
   }
 
   #move(

@@ -1,6 +1,6 @@
 # cas-relay
 
-The SLATE relay (`protocol.md` §1–§7, CAS §8–§12 from P2): coalition sessions, tokens, presence, status routing and flights between the hosts of one group; AOs, check-ins, missions and the CAS log get their own files on top of `core.ts` in P2.1–P2.4. The same code runs standalone (`slate-relay` on the server PC) and inside a host (host mode).
+The SLATE relay (`protocol.md` §1–§7, CAS §8–§12 from P2): coalition sessions, tokens, presence, status routing and flights between the hosts of one group; AOs and map entries (P2.1), check-ins and holds (P2.2), missions and the CAS log (P2.3, P2.4) have their own files on top of `core.ts`. The same code runs standalone (`slate-relay` on the server PC) and inside a host (host mode).
 
 | File | What |
 |---|---|
@@ -11,6 +11,8 @@ The SLATE relay (`protocol.md` §1–§7, CAS §8–§12 from P2): coalition ses
 | `flights.ts` | Flights (§7): create, join, leave, move, move up, command, end of a flight. |
 | `aos.ts` | JTAC on-station and AOs (§8.1–§8.3, P2.1): new AO or join by code, command order, `ao.update`, off-station (also by leaving, switching, an aircraft slot, expiry), closing. The join code only for JTACs. Other parts hear about joins, off-station and closing (`AoListener`) and can add to the AO's audience (checked-in aircraft, P2.2). |
 | `map-entries.ts` | Control measures, markers and keyholes (§8.4, §8.5, P2.1): who may draw and change what, visibility (`ao` = the AO's audience), `hidden` when an entry disappears for someone, `inUse` checks (holds, missions – P2.2/P2.3). |
+| `checkins.ts` | Check-in (§9.2, P2.2): lands in an AO, a picked JTAC as primary; check-out, release, `aoClosed`, `flightClosed`; checked-in flights join the AO's audience; situation update and COPY (§9.3); fuel calls (§6.5). |
+| `holds.ts` | Holds and the holding stack (§9.4, P2.2): assign, change, cancel, WILCO; overlaps flagged on both holds; visibility like map entries; a check-out takes the flight's holds along. |
 | `codes.ts` | Session codes, participant IDs, tokens, flight IDs and private flight codes. |
 | `config.ts` | The relay's files: `relay.json` (port, codes, public address, discovery settings), `cert.pem`, `key.pem` – created on the first start. |
 | `tls.ts` | Self-signed certificate and its fingerprint (§3.1). |
@@ -20,4 +22,5 @@ The SLATE relay (`protocol.md` §1–§7, CAS §8–§12 from P2): coalition ses
 | `relay-harness.ts` | Tests only: in-memory hosts that check every relay frame against the shared schemas. |
 | `flights.test.ts` | Flights (§7), incl. -1 leaving or dropping out (§7.4). |
 | `aos.test.ts` | JTAC on-station, AO command, off-station rules, map entry visibility and rights, the mission-time anchor (P2.1). |
+| `checkins.test.ts` | Check-in, who sees whose full status (§6.4), situation update, fuel calls, holds and their conflicts, receipts and level-2 confirmations (P2.2). |
 | `simulation.test.ts` | 8 pilots + 2 JTACs + 1 red player over 10 simulated minutes, with drop-outs and rejoins; then the 8 pilots in two flights of 4. |

@@ -1,29 +1,37 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Status routing (protocol.md §6.4): the full package to the own flight, a
-// `status.position` to the rest of the session. JTAC check-ins (P2.2) add the
-// full package to the JTACs of the AO the aircraft is checked in to.
+// Status routing (protocol.md §6.4): the full package to the own flight and the
+// JTACs of the AO it is checked in to, a `status.position` to everyone else.
 
 import type { StatusUpdate } from '@slate-dcs/shared';
 
 import { RELAY_FROM } from './core.js';
 import type { Member, RelayCore } from './core.js';
+import type { CheckIns } from './checkins.js';
 import type { Flights } from './flights.js';
 
 export class StatusRouter {
   readonly #core: RelayCore;
   readonly #flights: Flights;
+  readonly #checkIns: CheckIns;
 
-  constructor(core: RelayCore, flights: Flights) {
+  constructor(core: RelayCore, parts: { flights: Flights; checkIns: CheckIns }) {
     this.#core = core;
-    this.#flights = flights;
+    this.#flights = parts.flights;
+    this.#checkIns = parts.checkIns;
   }
 
   route(member: Member, message: StatusUpdate): void {
     const core = this.#core;
     const session = core.sessions[member.session];
     const flight = member.flight;
-    const mates = flight ? [...flight.slots.values()].filter((m) => m !== member) : [];
-    if (flight && mates.length > 0) {
+    // In full to his flight and to the JTACs of the AO it is checked in to (§6.4).
+    const full = [
+      ...new Set([
+        ...(flight ? [...flight.slots.values()] : []),
+        ...this.#checkIns.jtacsOf(member),
+      ]),
+    ].filter((m) => m !== member);
+    if (flight && full.length > 0) {
       member.lastFull = core.forward(
         session,
         {
@@ -32,7 +40,7 @@ export class StatusRouter {
           session: member.session,
           to: { scope: 'flight', id: flight.id },
         },
-        mates,
+        full,
       );
     }
     const body = message.body;
@@ -40,7 +48,7 @@ export class StatusRouter {
     if (body.pos !== null) {
       const others = core
         .inSession(member.session)
-        .filter((m) => m !== member && !mates.includes(m));
+        .filter((m) => m !== member && !full.includes(m));
       member.lastPosition = core.publish(
         session,
         {
@@ -61,6 +69,5 @@ export class StatusRouter {
         false,
       );
     }
-    if (message.ack) core.receipt(member, message.id, session.seq);
   }
 }

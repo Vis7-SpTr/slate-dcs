@@ -13,9 +13,11 @@ import type {
   AircraftInfo,
   Altitude,
   AoType,
+  CheckInBrief,
   Coalition,
   ErrorCode,
   Frequency,
+  Hold,
   LatLon,
   MapEntry,
   Message,
@@ -117,6 +119,26 @@ export interface FlightRec {
   slots: Map<number, Member>;
   /** When the -1 position became free; `null` while it is taken. */
   leadFreeSince: number | null;
+  /** The flight's check-in – at most one, always in an AO (§9.2). */
+  checkIn: CheckInRec | null;
+}
+
+/** A flight's check-in (§9.2). It belongs to the flight, not to who sent it. */
+export interface CheckInRec {
+  id: string;
+  flight: FlightRec;
+  ao: AoRec;
+  /** The JTAC it was sent to; `null` when sent to the AO or he went off-station. */
+  primary: Member | null;
+  brief: CheckInBrief;
+  since: number;
+}
+
+/** A hold as the relay keeps it (§9.4). */
+export interface HoldRec {
+  hold: Hold;
+  session: Coalition;
+  ao: AoRec;
 }
 
 /** One JTAC working an AO, in the order they joined (§8.3). */
@@ -205,6 +227,12 @@ export class RelayCore {
   readonly members = new Map<string, Member>();
   readonly byToken = new Map<string, Member>();
   readonly conns = new Set<Conn>();
+  /** Errors sent so far – the relay sends a receipt only for a message that caused none. */
+  errorCount = 0;
+  /** The host message being handled; its confirmations go back to its sender (§1.2). */
+  #current: { member: Member; id: string; ack: boolean } | null = null;
+  /** Frame ID → the command it came from and who sent it, for level-2 confirmations. */
+  readonly #confirms = new Map<string, { sender: string; command: string }>();
 
   constructor(options: RelayOptions) {
     this.codes = options.codes;
@@ -264,8 +292,15 @@ export class RelayCore {
     session.seq += 1;
     const seq = session.seq;
     const now = this.now();
-    const base = { v: PROTOCOL_VERSION, id: ulid(now), ts: now, ack: false, re: null };
-    const frame = (m: Outbound) => JSON.stringify({ ...base, ...m, seq, rts: now });
+    const id = ulid(now);
+    const base = { v: PROTOCOL_VERSION, id, ts: now, ack: false, re: null };
+    // Made from a command that wants confirmations: they go back to its sender (§1.2).
+    const current = this.#current;
+    const frame = (m: Outbound) => {
+      const confirm = current !== null && current.ack && m.re === current.id;
+      if (confirm) this.#remember(id, current.member.pid, current.id);
+      return JSON.stringify({ ...base, ...m, ack: confirm, seq, rts: now });
+    };
     if (typeof message !== 'function') {
       const text = frame(message);
       for (const member of to) member.conn?.link.send(text);
@@ -286,11 +321,39 @@ export class RelayCore {
   }
 
   /** Forwards a host's message unchanged, with `seq` and `rts` added. */
-  forward(session: Session, message: Message, to: readonly Member[]): Frame {
+  forward(session: Session, message: Message, to: readonly Member[], replay = false): Frame {
     session.seq += 1;
-    const text = JSON.stringify({ ...message, seq: session.seq, rts: this.now() });
+    const seq = session.seq;
+    const text = JSON.stringify({ ...message, seq, rts: this.now() });
     for (const member of to) member.conn?.link.send(text);
-    return { seq: session.seq, text };
+    if (message.ack) this.#remember(message.id, message.from, message.id);
+    if (replay) this.#keep(session, { seq, text, to: new Set(to.map((m) => m.pid)) });
+    return { seq, text };
+  }
+
+  /** Runs the handling of one host message, so its confirmations can find their way back. */
+  handling(member: Member, message: Message, handle: () => void): void {
+    this.#current = { member, id: message.id, ack: message.ack };
+    try {
+      handle();
+    } finally {
+      this.#current = null;
+    }
+  }
+
+  /** Who wants to hear that a frame was received, and for which command (§1.2). */
+  confirmation(frameId: string): { sender: string; command: string } | null {
+    return this.#confirms.get(frameId) ?? null;
+  }
+
+  #remember(frameId: string, sender: string, command: string): void {
+    this.#confirms.set(frameId, { sender, command });
+    // Kept about as long as the replay buffer; oldest first out.
+    while (this.#confirms.size > 4 * this.#replayLimit) {
+      const oldest = this.#confirms.keys().next().value;
+      if (oldest === undefined) break;
+      this.#confirms.delete(oldest);
+    }
   }
 
   #keep(session: Session, entry: LogEntry): void {
@@ -326,6 +389,7 @@ export class RelayCore {
   }
 
   error(conn: Conn | null, code: ErrorCode, text: string, re: string | null): void {
+    this.errorCount += 1;
     this.direct(conn, {
       type: 'error',
       from: RELAY_FROM,
