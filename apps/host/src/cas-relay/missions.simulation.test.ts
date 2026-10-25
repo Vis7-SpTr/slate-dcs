@@ -5,7 +5,11 @@
 // JTAC dropping out, a flight checking out (mission back to draft and
 // reassigned), reconnects with resync. Through all of it no pilot ever
 // receives another aircraft's lane or clearance.
+//
+// P2.4 done-when: the same run's CAS log exports as a correct timeline; a
+// JTAC gets only his AO, a pilot only his flight's missions (§12.3).
 
+import { casLogCsv, casLogMarkdown, LogEntry } from '@slate-dcs/shared';
 import type { FireMission, Message } from '@slate-dcs/shared';
 import { describe, expect, it } from 'vitest';
 
@@ -96,7 +100,7 @@ describe('CAS simulation: 8 pilots, 2 JTACs (P2.3)', () => {
     const colt = ['Colt1', 'Colt2', 'Colt3', 'Colt4'].map((n) => join(n, false, 'F-16C_50'));
     const pilots = [...enfield, ...colt];
     const [e1, e2, e3, e4] = enfield as [FakeHost, FakeHost, FakeHost, FakeHost];
-    const [c1, c2] = colt as [FakeHost, FakeHost, FakeHost, FakeHost];
+    const [c1, c2, c3] = colt as [FakeHost, FakeHost, FakeHost, FakeHost];
     e1.send('flight.create', { name: 'Enfield', open: true });
     const enfieldId = e1.last('flight.created')?.body.flightId ?? '';
     for (const p of enfield.slice(1)) p.send('flight.join', { flightId: enfieldId });
@@ -320,5 +324,156 @@ describe('CAS simulation: 8 pilots, 2 JTACs (P2.3)', () => {
         p.of('fm.updated').every((f) => f.body.missionId === m2 && f.body.lanes.length === 0),
       ).toBe(true);
     }
+
+    // --- The CAS log (P2.4) ------------------------------------------------
+    const log = relay.casLog('blue');
+    expect(log.length).toBeGreaterThan(50);
+    for (const entry of log) expect(LogEntry.safeParse(entry).success).toBe(true);
+    // A timeline: oldest first; mission time never runs backwards.
+    const timed = log.filter((e) => e.mtime !== null);
+    for (let i = 1; i < log.length; i += 1) {
+      expect(log[i]?.seq).toBeGreaterThanOrEqual(log[i - 1]?.seq ?? 0);
+      expect(log[i]?.rts).toBeGreaterThanOrEqual(log[i - 1]?.rts ?? 0);
+    }
+    for (let i = 1; i < timed.length; i += 1) {
+      expect(timed[i]?.mtime).toBeGreaterThanOrEqual(timed[i - 1]?.mtime ?? 0);
+    }
+    /** `story` appears in this order (other entries may lie between). */
+    const tells = (entries: readonly { kind: string }[], story: string[]) => {
+      let at = 0;
+      for (const e of entries) if (e.kind === story[at]) at += 1;
+      return at === story.length;
+    };
+    const ofMission = (missionId: string) => log.filter((e) => e.missionId === missionId);
+    expect(
+      tells(ofMission(m1), [
+        'fm.create',
+        'fm.assign',
+        'fm.brief',
+        'fm.readbackCorrect',
+        'fm.correlated',
+        'fm.clear',
+        'fm.abort',
+        'fm.abort',
+        'fm.clear',
+        'fm.update',
+        'fm.abort',
+        'fm.readbackCorrect',
+        'fm.clear',
+        'fm.waitingBda',
+        'fm.bda',
+        'fm.ackBda',
+        'fm.reattack',
+        'fm.clear',
+        'fm.reattack',
+        'fm.offerCommand',
+        'fm.acceptCommand',
+        'fm.commandMoved',
+        'fm.readbackCorrect',
+        'fm.complete',
+      ]),
+    ).toBe(true);
+    expect(
+      tells(ofMission(m2), [
+        'fm.create',
+        'fm.assign',
+        'fm.window',
+        'fm.windowOpened',
+        'fm.windowExpired',
+        'fm.unassign',
+        'fm.assign',
+        'fm.readbackCorrect',
+      ]),
+    ).toBe(true);
+    const aborts = ofMission(m1).filter((e) => e.kind === 'fm.abort');
+    expect(aborts.map((e) => [e.actorName, e.pid])).toEqual([
+      ['Enfield 1-2', e2.pid],
+      ['Pontiac 21', e1.pid],
+      ['Axeman 11', e1.pid],
+      ['Axeman 11', e1.pid],
+    ]);
+    expect(aborts[1]?.summary).toBe(
+      'Pontiac 21: ABORT Enfield 1-1 (run 1) on voice: Friendlies close',
+    );
+    expect(aborts[2]?.summary).toContain('read-back item changed');
+    // The relay's own steps are its own: the window ending, command back on the drop-out.
+    expect(log.filter((e) => e.kind === 'fm.windowExpired').map((e) => e.actor)).toEqual([
+      'relay',
+      'relay',
+    ]);
+    expect(log.find((e) => e.kind === 'fm.commandMoved')).toMatchObject({
+      actor: 'relay',
+      summary: 'command → Axeman 11',
+    });
+    expect(log.filter((e) => e.area === 'ao').map((e) => e.kind)).toEqual([
+      'jtac.onStation',
+      'jtac.onStation',
+      'session.presence',
+      'session.presence',
+    ]);
+    expect(log.filter((e) => e.area === 'checkIn').map((e) => [e.kind, e.flightId])).toEqual([
+      ['cas.checkIn', enfieldId],
+      ['cas.checkIn', coltId],
+      ['cas.checkOut', coltId],
+    ]);
+    // Mission time from the hosts' clock (§1.4): the clearance sent at 51800 s.
+    expect(ofMission(m1).find((e) => e.kind === 'fm.clear')?.mtime).toBe(51800);
+
+    // The export: one row per entry, in the same order.
+    const markdown = casLogMarkdown(log, { title: 'CAS log – Blue' });
+    const rows = markdown
+      .split('\n')
+      .filter((line) => line.startsWith('| ') && !line.startsWith('| Mission time'));
+    expect(rows).toHaveLength(log.length);
+    rows.forEach((row, i) => {
+      expect(row).toContain(log[i]?.summary.replace(/\|/g, '\\|') ?? '');
+    });
+    expect(casLogCsv(log).trimEnd().split('\r\n')).toHaveLength(log.length + 1);
+
+    // --- Who gets what (§12.3) ---------------------------------------------
+    const request = (host: FakeHost, scope: 'ao' | 'flight', target: string) => {
+      host.clear();
+      host.send('log.request', { scope, id: target, from: null, to: null });
+      const error = host.last('error');
+      if (error) return error.body.code;
+      return host.last('log.entries')?.body.entries ?? [];
+    };
+    // Both JTACs: the whole AO – here, every entry.
+    for (const j of [axeman, pontiac]) expect(request(j, 'ao', ao.aoId)).toEqual(log);
+    for (const p of pilots) {
+      const flightId = enfield.includes(p) ? enfieldId : coltId;
+      const got = request(p, 'flight', flightId);
+      if (typeof got === 'string') throw new Error(got);
+      expect(got.length).toBeGreaterThan(0);
+      for (const e of got) {
+        expect(e.flightId).toBe(flightId);
+        expect(['mission', 'checkIn']).toContain(e.area);
+        expect(e.pid === null || e.pid === p.pid).toBe(true);
+        expect(e.kind).not.toBe('fm.warning');
+      }
+      // Exactly what he may see – nothing left out.
+      const expected = log.filter(
+        (e) =>
+          e.flightId === flightId &&
+          (e.area === 'mission' || e.area === 'checkIn') &&
+          e.kind !== 'fm.warning' &&
+          (e.pid === null || e.pid === p.pid),
+      );
+      expect(got).toEqual(expected);
+    }
+    // Enfield 1-1 sees his own clearances, Enfield 1-2 not one of them.
+    const lead = request(e1, 'flight', enfieldId);
+    const wing = request(e2, 'flight', enfieldId);
+    if (typeof lead === 'string' || typeof wing === 'string') throw new Error('refused');
+    expect(lead.filter((e) => e.kind === 'fm.clear')).toHaveLength(4);
+    expect(wing.filter((e) => e.kind === 'fm.clear').map((e) => e.pid)).toEqual([e2.pid]);
+    // Colt 3 had no lane: the mission's own steps, no aircraft's.
+    const c3Got = request(c3, 'flight', coltId);
+    if (typeof c3Got === 'string') throw new Error(c3Got);
+    expect(c3Got.some((e) => e.kind === 'fm.assign')).toBe(true);
+    expect(c3Got.every((e) => e.pid === null)).toBe(true);
+    // Not someone else's flight or AO.
+    expect(request(c1, 'flight', enfieldId)).toBe('forbidden');
+    expect(request(e1, 'ao', ao.aoId)).toBe('forbidden');
   });
 });

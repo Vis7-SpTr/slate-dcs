@@ -301,6 +301,8 @@ export {
 } from './missions.js';
 
 export { CAS_LOG_RULES, LogArea, LogEntries, LogEntry, LogRequest } from './cas-log.js';
+export { casLogCsv, casLogMarkdown, formatLogMtime } from './cas-log-export.js';
+export type { CasLogExportOptions } from './cas-log-export.js';
 
 export {
   blocksOverlap,

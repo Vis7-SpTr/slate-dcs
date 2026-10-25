@@ -10,6 +10,8 @@ import type { ErrorCode, Hold, Message, PointRef } from '@slate-dcs/shared';
 import { RELAY_FROM } from './core.js';
 import type { AoRec, HoldRec, Member, RelayCore } from './core.js';
 import type { Aos } from './aos.js';
+import { altText, mtText, pointText } from './cas-log.js';
+import type { CasLog } from './cas-log.js';
 import type { CheckIns } from './checkins.js';
 import type { Flights } from './flights.js';
 import type { MapEntries } from './map-entries.js';
@@ -22,17 +24,19 @@ export class Holds {
   readonly #aos: Aos;
   readonly #flights: Flights;
   readonly #entries: MapEntries;
+  readonly #log: CasLog;
   readonly #holds = new Map<string, HoldRec>();
   #nextId = 1;
 
   constructor(
     core: RelayCore,
-    parts: { aos: Aos; flights: Flights; checkIns: CheckIns; entries: MapEntries },
+    parts: { aos: Aos; flights: Flights; checkIns: CheckIns; entries: MapEntries; log: CasLog },
   ) {
     this.#core = core;
     this.#aos = parts.aos;
     this.#flights = parts.flights;
     this.#entries = parts.entries;
+    this.#log = parts.log;
     parts.aos.listen({
       // A JTAC joining gets the AO's AO-only holds; leaving, they disappear for him.
       joined: (member, ao) => {
@@ -105,6 +109,7 @@ export class Holds {
     this.#holds.set(rec.hold.holdId, rec);
     this.#restack(ao, rec);
     this.#updated(rec, withMember(this.viewers(rec), member), message.id);
+    this.#logHold(rec, 'cas.hold.assign', `hold assigned: ${this.#holdText(rec.hold)}`);
   }
 
   /** The hold's new content in full; any JTAC of its AO. */
@@ -125,6 +130,7 @@ export class Holds {
       null,
     );
     this.#updated(rec, withMember(after, member), message.id);
+    this.#logHold(rec, 'cas.hold.update', `hold changed: ${this.#holdText(rec.hold)}`);
   }
 
   cancel(member: Member, message: Extract<Message, { type: 'cas.hold.cancel' }>): void {
@@ -136,6 +142,11 @@ export class Holds {
     const to = withMember(this.viewers(rec), member);
     this.#holds.delete(rec.hold.holdId);
     this.#cancelled(rec, to, false, message.id);
+    this.#logHold(
+      rec,
+      'cas.hold.cancel',
+      `hold cancelled for ${this.#log.flightName(rec.hold.flightId)}`,
+    );
     this.#restack(rec.ao, null);
   }
 
@@ -154,6 +165,7 @@ export class Holds {
       jtacs,
       true,
     );
+    this.#logHold(rec, 'cas.hold.wilco', 'WILCO hold', member.pid);
   }
 
   // -------------------------------------------------------------------------
@@ -231,6 +243,32 @@ export class Holds {
       rec.hold = { ...rec.hold, conflicts };
       if (!same && rec !== changed) this.#updated(rec, this.viewers(rec), null);
     }
+  }
+
+  /** Holds go into the log's situation area (§12.2). */
+  #logHold(rec: HoldRec, kind: string, summary: string, pid: string | null = null): void {
+    this.#log.add(rec.session, {
+      area: 'situation',
+      kind,
+      summary,
+      aoId: rec.ao.id,
+      flightId: rec.hold.flightId,
+      pid,
+    });
+  }
+
+  /** `Enfield 1 at IP HAMMER, 15000 ft MSL – 17000 ft MSL, orbit 3 NM left, 14:00:00 L – 14:30:00 L`. */
+  #holdText(hold: Hold): string {
+    const nm = (m: number | null) => `${String(Math.round(((m ?? 0) / 1852) * 10) / 10)} NM`;
+    const shape =
+      hold.shape === 'orbit'
+        ? `orbit ${nm(hold.radiusM)}`
+        : `racetrack ${nm(hold.legM)} inbound ${String(Math.round(hold.inboundDeg ?? 0))}°`;
+    const times =
+      hold.from === null && hold.until === null
+        ? ''
+        : `, ${mtText(hold.from)} – ${hold.until === null ? 'open' : mtText(hold.until)}`;
+    return `${this.#log.flightName(hold.flightId)} at ${pointText(hold.point, (id) => this.#entries.get(id)?.entry.label ?? null)}, ${altText(hold.floor)} – ${altText(hold.ceiling)}, ${shape} ${hold.turns} turns${times}`;
   }
 
   #updated(rec: HoldRec, to: readonly Member[], re: string | null): void {

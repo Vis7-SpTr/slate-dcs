@@ -6,7 +6,8 @@
 // relay.ts wires them together.
 //
 // State lives in memory only (decided 21 Oct 2026): after a restart everyone
-// joins as a new participant.
+// joins as a new participant. The one exception is the CAS log, which is also
+// written to disk (cas-log-file.ts, decided 25 Oct 2026 – D7).
 
 import { PROTOCOL_VERSION, ulid } from '@slate-dcs/shared';
 import type {
@@ -19,6 +20,7 @@ import type {
   Frequency,
   Hold,
   LatLon,
+  LogEntry as CasLogEntry,
   MapEntry,
   Message,
   Participant,
@@ -53,6 +55,11 @@ export interface RelayLog {
   debug(message: string): void;
 }
 
+/** Where the CAS log goes besides memory: the JSONL files (cas-log-file.ts, §12.1). */
+export interface CasLogSink {
+  append(session: Coalition, entry: CasLogEntry): void;
+}
+
 export interface RelayOptions {
   codes: RelayCodes;
   /** Relay name and version for `welcome`, e.g. `slate-relay 0.1.0`. */
@@ -61,6 +68,8 @@ export interface RelayOptions {
   now?: () => number;
   /** Messages kept per session for resync (§4.5). */
   replayLimit?: number;
+  /** The CAS log's files; without one the log lives in memory only (tests). */
+  casLog?: CasLogSink;
 }
 
 /** Rate limit per connection: burst and messages per second. */
@@ -230,7 +239,7 @@ export class RelayCore {
   /** Errors sent so far – the relay sends a receipt only for a message that caused none. */
   errorCount = 0;
   /** The host message being handled; its confirmations go back to its sender (§1.2). */
-  #current: { member: Member; id: string; ack: boolean } | null = null;
+  #current: { member: Member; id: string; type: string; ack: boolean } | null = null;
   /** Frame ID → the command it came from and who sent it, for level-2 confirmations. */
   readonly #confirms = new Map<string, { sender: string; command: string }>();
 
@@ -333,12 +342,18 @@ export class RelayCore {
 
   /** Runs the handling of one host message, so its confirmations can find their way back. */
   handling(member: Member, message: Message, handle: () => void): void {
-    this.#current = { member, id: message.id, ack: message.ack };
+    this.#current = { member, id: message.id, type: message.type, ack: message.ack };
     try {
       handle();
     } finally {
       this.#current = null;
     }
+  }
+
+  /** Sender and type of the host message being handled; `null` on the relay's own events (tick). */
+  get handled(): { member: Member; type: string } | null {
+    const current = this.#current;
+    return current === null ? null : { member: current.member, type: current.type };
   }
 
   /** Who wants to hear that a frame was received, and for which command (§1.2). */

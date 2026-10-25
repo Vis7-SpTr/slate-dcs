@@ -9,6 +9,8 @@ import type { AoSpec, ErrorCode, Message } from '@slate-dcs/shared';
 import { z } from 'zod';
 
 import { newAoId, newPrivateCode } from './codes.js';
+import { altText, aoText } from './cas-log.js';
+import type { CasLog } from './cas-log.js';
 import { RELAY_FROM } from './core.js';
 import type { AoArea, AoRec, Member, RelayCore } from './core.js';
 
@@ -28,12 +30,14 @@ type Fail = (code: ErrorCode, text: string) => void;
 
 export class Aos {
   readonly #core: RelayCore;
+  readonly #log: CasLog;
   readonly #aos = new Map<string, AoRec>();
   readonly #listeners: AoListener[] = [];
   readonly #audiences: ((ao: AoRec) => Member[])[] = [];
 
-  constructor(core: RelayCore) {
+  constructor(core: RelayCore, log: CasLog) {
     this.#core = core;
+    this.#log = log;
   }
 
   listen(listener: AoListener): void {
@@ -95,6 +99,7 @@ export class Aos {
       ao.jtacs.push(jtac);
       member.ao = ao;
       this.#updated(ao, message.id);
+      this.#logAo(ao, 'jtac.onStation', `on-station in ${aoText(ao.name)}`);
       for (const listener of this.#listeners) listener.joined?.(member, ao);
       core.log?.info(`${core.who(member)} joined ${ao.name} (${ao.id})`);
       return;
@@ -128,6 +133,7 @@ export class Aos {
       core.inSession(ao.session),
       true,
     );
+    this.#logAo(ao, 'jtac.onStation', `on-station – new ${aoText(ao.name)} (${areaText(ao.area)})`);
     for (const listener of this.#listeners) listener.joined?.(member, ao);
     core.log?.info(`${core.who(member)} on-station: new ${ao.name} (${ao.id})`);
   }
@@ -151,9 +157,19 @@ export class Aos {
     if (!area) return;
     const next: AoRec = { ...ao, area, name: changes.name ?? ao.name };
     if (!this.#valid(next, member, fail)) return;
+    const before = areaText(ao.area);
+    const centerBefore = JSON.stringify(ao.area.center);
+    const nameBefore = ao.name;
     ao.area = area;
     ao.name = next.name;
     this.#updated(ao, message.id);
+    const moved = centerBefore === JSON.stringify(ao.area.center) ? '' : ', recentred';
+    const rename = nameBefore === ao.name ? '' : `, renamed from ${nameBefore}`;
+    this.#logAo(
+      ao,
+      'ao.update',
+      `${aoText(ao.name)} changed: ${before} → ${areaText(ao.area)}${moved}${rename}`,
+    );
   }
 
   offStation(member: Member, message: Extract<Message, { type: 'jtac.offStation' }>): void {
@@ -174,12 +190,19 @@ export class Aos {
   leave(member: Member, re: string | null, stays: boolean): void {
     const ao = member.ao;
     if (!ao) return;
+    const core = this.#core;
+    // Named while still in the AO, so the log keeps his callsign.
+    const name = this.#log.name(member);
+    const self = core.handled?.member === member;
+    const offText = self
+      ? `off-station from ${aoText(ao.name)}`
+      : `${name} off-station from ${aoText(ao.name)} (${stays ? 'no longer a JTAC' : 'left the session'})`;
     ao.jtacs = ao.jtacs.filter((jtac) => jtac.member !== member);
     member.ao = null;
     for (const listener of this.#listeners) listener.left?.(member, ao, stays);
-    const core = this.#core;
     if (ao.jtacs.length > 0) {
       this.#updated(ao, re);
+      this.#logAo(ao, 'jtac.offStation', offText, self ? member : 'relay');
       core.log?.info(`${core.who(member)} off-station from ${ao.name}`);
       return;
     }
@@ -198,6 +221,7 @@ export class Aos {
       core.inSession(ao.session),
       true,
     );
+    this.#logAo(ao, 'ao.closed', `${offText} – ${aoText(ao.name)} closed`, self ? member : 'relay');
     core.log?.info(`${core.who(member)} off-station: ${ao.name} closed`);
   }
 
@@ -214,6 +238,14 @@ export class Aos {
       return;
     }
     this.#updated(ao, null, skip);
+    const command = this.inCommand(ao);
+    const commandText = command ? ` – ${this.#log.name(command)} in command` : ' – no JTAC online';
+    this.#logAo(
+      ao,
+      'session.presence',
+      `${this.#log.name(member)} ${presence === 'lost' ? 'lost' : 'back'}${commandText}`,
+      'relay',
+    );
     for (const listener of this.#listeners) listener.presence?.(member, ao);
   }
 
@@ -268,6 +300,16 @@ export class Aos {
     return this.all()
       .filter((ao) => ao.session === viewer.session)
       .map((ao) => this.view(ao, viewer));
+  }
+
+  #logAo(ao: AoRec, kind: string, summary: string, actor?: Member | 'relay'): void {
+    this.#log.add(ao.session, {
+      area: 'ao',
+      kind,
+      summary,
+      aoId: ao.id,
+      ...(actor ? { actor } : {}),
+    });
   }
 
   /** `ao.updated` to the session (each with his own view), minus `skip`. */
@@ -328,4 +370,16 @@ export class Aos {
     if (!parsed.success) fail('badMessage', z.prettifyError(parsed.error));
     return parsed.success;
   }
+}
+
+/** `circle 10 NM, SFC – 20000 ft MSL`. */
+function areaText(area: AoArea): string {
+  const nm = (m: number | null) => `${String(Math.round(((m ?? 0) / 1852) * 10) / 10)} NM`;
+  const shape =
+    area.type === 'circle'
+      ? `circle ${nm(area.radiusM)}`
+      : area.type === 'square'
+        ? `square ${nm(area.lengthM)} × ${nm(area.widthM)}`
+        : `polygon of ${String(area.points?.length ?? 0)} points`;
+  return `${shape}, ${altText(area.floor)} – ${altText(area.ceiling)}`;
 }

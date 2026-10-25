@@ -19,6 +19,8 @@ import type {
 import { RELAY_FROM } from './core.js';
 import type { AoRec, FlightRec, Member, RelayCore } from './core.js';
 import type { Aos } from './aos.js';
+import type { CasLog } from './cas-log.js';
+import { missionLogLines } from './cas-log-missions.js';
 import type { CheckIns } from './checkins.js';
 import type { Flights } from './flights.js';
 import type { MapEntries } from './map-entries.js';
@@ -71,16 +73,20 @@ export class Missions {
   readonly #core: RelayCore;
   readonly #aos: Aos;
   readonly #flights: Flights;
+  readonly #log: CasLog;
   readonly #missions = new Map<string, MissionRec>();
+  /** Each mission as last logged – the log records what changed since (§12.2). */
+  readonly #logged = new Map<string, FireMission>();
   #nextId = 1;
 
   constructor(
     core: RelayCore,
-    parts: { aos: Aos; flights: Flights; checkIns: CheckIns; entries: MapEntries },
+    parts: { aos: Aos; flights: Flights; checkIns: CheckIns; entries: MapEntries; log: CasLog },
   ) {
     this.#core = core;
     this.#aos = parts.aos;
     this.#flights = parts.flights;
+    this.#log = parts.log;
     parts.aos.listen({
       // A JTAC joining the AO gets all its missions; leaving, they disappear for him.
       joined: (member, ao) => {
@@ -95,7 +101,10 @@ export class Missions {
       },
       // Hosts drop the AO's missions with `ao.closed`.
       closed: (ao) => {
-        for (const rec of this.#inAo(ao)) this.#missions.delete(rec.mission.missionId);
+        for (const rec of this.#inAo(ao)) {
+          this.#missions.delete(rec.mission.missionId);
+          this.#logged.delete(rec.mission.missionId);
+        }
       },
     });
     // A flight leaving the AO: its missions go back to draft, content kept (§9.2, §10.1).
@@ -330,6 +339,8 @@ export class Missions {
         if (!need(owner, 'Only the owner deletes')) return;
         this.#missions.delete(m.missionId);
         this.#deleted(rec, this.#viewers(rec), false, re);
+        this.#logLine(rec, 'fm.delete', 'mission deleted');
+        this.#logged.delete(m.missionId);
         this.#refresh(rec.ao, null);
         return;
       }
@@ -685,6 +696,45 @@ export class Missions {
   #changed(rec: MissionRec, re: string | null): void {
     this.#refresh(rec.ao, rec);
     this.#send(rec, this.#viewers(rec), re);
+    this.#logChanges(rec);
+  }
+
+  /** Log entries for what changed since the mission was last logged (cas-log-missions.ts). */
+  #logChanges(rec: MissionRec): void {
+    const m = rec.mission;
+    const before = this.#logged.get(m.missionId) ?? null;
+    const lines = missionLogLines(before, m, this.#log, this.#handled());
+    this.#logged.set(m.missionId, structuredClone(m));
+    const flightId = m.assignee?.flightId ?? before?.assignee?.flightId ?? null;
+    for (const line of lines) {
+      this.#log.add(rec.ao.session, {
+        area: 'mission',
+        kind: line.kind,
+        summary: line.summary,
+        aoId: rec.ao.id,
+        flightId,
+        missionId: m.missionId,
+        pid: line.pid,
+        jtacOnly: line.jtacOnly ?? false,
+      });
+    }
+  }
+
+  #handled(): { pid: string; type: string } | null {
+    const handled = this.#core.handled;
+    return handled === null ? null : { pid: handled.member.pid, type: handled.type };
+  }
+
+  #logLine(rec: MissionRec, kind: string, summary: string): void {
+    const m = rec.mission;
+    this.#log.add(rec.ao.session, {
+      area: 'mission',
+      kind,
+      summary,
+      aoId: rec.ao.id,
+      flightId: m.assignee?.flightId ?? null,
+      missionId: m.missionId,
+    });
   }
 
   #send(rec: MissionRec, to: readonly Member[], re: string | null): void {
@@ -769,7 +819,10 @@ export class Missions {
           changed = true;
         }
       }
-      if (changed && rec !== except) this.#send(rec, jtacs, null);
+      if (changed && rec !== except) {
+        this.#send(rec, jtacs, null);
+        this.#logChanges(rec);
+      }
     }
   }
 

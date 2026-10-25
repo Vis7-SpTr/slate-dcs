@@ -8,7 +8,13 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 
-import { DEFAULT_PORTS, RelayAddress, RelayFingerprint, SessionCode } from '@slate-dcs/shared';
+import {
+  CAS_LOG_RULES,
+  DEFAULT_PORTS,
+  RelayAddress,
+  RelayFingerprint,
+  SessionCode,
+} from '@slate-dcs/shared';
 import { z } from 'zod';
 
 import { writeFileAtomic } from '../fs-safe.js';
@@ -40,6 +46,8 @@ const ConfigFile = z.object({
   announceMaxLength: z.int().min(40).nullable().default(null),
   /** With `dcsServerFolder`: the DCS server starts this relay when it loads a mission. */
   autoStartWithDcs: z.boolean().default(true),
+  /** Days the CAS log files are kept after their last entry (protocol.md §12.1, D7). */
+  logRetentionDays: z.int().min(1).max(3650).default(CAS_LOG_RULES.retentionDays),
   /**
    * A relay hosted somewhere else (Raspberry Pi, VPS): the DCS server
    * announces that one, and this slate-relay only installs the hook and the
@@ -65,6 +73,7 @@ export interface RelayFiles {
   lanAddress: string | null;
   announceMaxLength: number | null;
   autoStartWithDcs: boolean;
+  logRetentionDays: number;
   remoteRelay: RemoteRelay | null;
   certPem: string;
   keyPem: string;
@@ -103,6 +112,7 @@ export async function loadRelayFiles(dir: string): Promise<RelayFiles> {
       lanAddress: null,
       announceMaxLength: null,
       autoStartWithDcs: true,
+      logRetentionDays: CAS_LOG_RULES.retentionDays,
       remoteRelay: null,
     };
     await writeNew(configPath, `${JSON.stringify(config, null, 2)}\n`);
@@ -138,6 +148,7 @@ export async function loadRelayFiles(dir: string): Promise<RelayFiles> {
     lanAddress: config.lanAddress,
     announceMaxLength: config.announceMaxLength,
     autoStartWithDcs: config.autoStartWithDcs,
+    logRetentionDays: config.logRetentionDays,
     remoteRelay: config.remoteRelay,
     certPem,
     keyPem,

@@ -5,16 +5,29 @@
 // AO's audience: they see its AO-only entries and holds, and its JTACs get
 // their full status packages.
 
-import type { CheckIn, ErrorCode, Message } from '@slate-dcs/shared';
+import { fuelUnit, unitDisplayName } from '@slate-dcs/shared';
+import type { CheckIn, CheckInBrief, ErrorCode, LaserCodes, Message } from '@slate-dcs/shared';
 
 import { RELAY_FROM } from './core.js';
 import type { AoRec, CheckInRec, Member, RelayCore } from './core.js';
 import type { AoListener, Aos } from './aos.js';
+import { aoText } from './cas-log.js';
+import type { CasLog } from './cas-log.js';
 import type { FlightListener, Flights } from './flights.js';
 import type { MapEntries } from './map-entries.js';
 
 type Fail = (code: ErrorCode, text: string) => void;
 type CheckOutBy = 'flight' | 'jtac' | 'aoClosed' | 'flightClosed';
+
+/** How a check-out is logged (§12.2): the message behind it and the words. */
+const CHECK_OUT_LOG: Record<CheckOutBy, { kind: string; text: string }> = {
+  flight: { kind: 'cas.checkOut', text: 'checked out' },
+  jtac: { kind: 'cas.release', text: 'released – cleared off station' },
+  aoClosed: { kind: 'cas.checkedOut', text: 'checked out – the AO closed' },
+  flightClosed: { kind: 'cas.checkedOut', text: 'checked out – the flight ended' },
+};
+
+const LB_PER_KG = 2.204_62;
 
 /** What a check-in brings along for the flight: the AO's AO-only holds (holds.ts). */
 export type AoHolds = (ao: AoRec) => Extract<Message, { type: 'cas.hold.updated' }>['body'][];
@@ -30,15 +43,20 @@ export class CheckIns {
   readonly #aos: Aos;
   readonly #flights: Flights;
   readonly #entries: MapEntries;
+  readonly #log: CasLog;
   readonly #listeners: CheckInListener[] = [];
   #aoHolds: AoHolds = () => [];
   #nextId = 1;
 
-  constructor(core: RelayCore, parts: { aos: Aos; flights: Flights; entries: MapEntries }) {
+  constructor(
+    core: RelayCore,
+    parts: { aos: Aos; flights: Flights; entries: MapEntries; log: CasLog },
+  ) {
     this.#core = core;
     this.#aos = parts.aos;
     this.#flights = parts.flights;
     this.#entries = parts.entries;
+    this.#log = parts.log;
     const onAo: AoListener = {
       left: (member, ao) => {
         this.#jtacLeft(member, ao);
@@ -124,9 +142,20 @@ export class CheckIns {
     const old = flight.checkIn;
     if (old && old.ao !== ao) this.#checkOut(old, 'flight', null);
     if (old?.ao === ao) {
+      const codesBefore = old.brief.laserCodes;
       old.brief = message.body.brief;
       old.primary = primary;
       this.#announce(old, message.id);
+      this.#logCheckIn(old, 'check-in updated');
+      if (codesText(codesBefore) !== codesText(old.brief.laserCodes)) {
+        this.#log.add(ao.session, {
+          area: 'situation',
+          kind: 'cas.checkIn',
+          summary: `laser codes of ${old.brief.callsign}: ${codesText(codesBefore)} → ${codesText(old.brief.laserCodes)}`,
+          aoId: ao.id,
+          flightId: flight.id,
+        });
+      }
       return;
     }
     const rec: CheckInRec = {
@@ -139,6 +168,7 @@ export class CheckIns {
     };
     flight.checkIn = rec;
     this.#announce(rec, message.id);
+    this.#logCheckIn(rec, `checked in to ${aoText(ao.name)}`);
     this.#core.log?.info(`${this.#flights.display(flight)} checked in to ${ao.name}`);
   }
 
@@ -203,6 +233,16 @@ export class CheckIns {
       return;
     }
     this.#forward(member, message, to);
+    const flightId = address.scope === 'flight' ? address.id : null;
+    const target =
+      flightId === null ? `everyone in ${aoText(ao.name)}` : this.#log.flightName(flightId);
+    this.#log.add(ao.session, {
+      area: 'situation',
+      kind: 'cas.sitUpdate',
+      summary: `situation update to ${target}${sitText(message.body.update)}`,
+      aoId: ao.id,
+      flightId,
+    });
   }
 
   /** `cas.sitCopy` (pilot, `re` = the update): COPY, to the JTACs of his flight's AO. */
@@ -222,6 +262,14 @@ export class CheckIns {
       message,
       ao.jtacs.map((jtac) => jtac.member),
     );
+    this.#log.add(ao.session, {
+      area: 'situation',
+      kind: 'cas.sitCopy',
+      summary: 'COPY situation update',
+      aoId: ao.id,
+      flightId: member.flight?.id ?? null,
+      pid: member.pid,
+    });
   }
 
   /**
@@ -237,6 +285,23 @@ export class CheckIns {
       return;
     }
     this.#forward(member, message, to);
+    // Logged for checked-in aircraft (§6.5, §12.2), in the cockpit's unit.
+    const checkIn = flight?.checkIn;
+    if (checkIn) {
+      const { call, internalKg } = message.body;
+      const lbs = fuelUnit(member.aircraft?.type) === 'lbs';
+      const amount = lbs
+        ? `${String(Math.round(internalKg * LB_PER_KG))} lbs`
+        : `${String(Math.round(internalKg))} kg`;
+      this.#log.add(checkIn.ao.session, {
+        area: 'fuel',
+        kind: 'fuel.call',
+        summary: `${call.toUpperCase()} – ${amount} internal`,
+        aoId: checkIn.ao.id,
+        flightId: checkIn.flight.id,
+        pid: member.pid,
+      });
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -327,7 +392,26 @@ export class CheckIns {
       [...new Set([...jtacs, ...crew])].filter((m) => m.presence !== 'left'),
       true,
     );
+    this.#log.add(rec.ao.session, {
+      area: 'checkIn',
+      kind: CHECK_OUT_LOG[by].kind,
+      summary: `${rec.brief.callsign} ${CHECK_OUT_LOG[by].text} (${aoText(rec.ao.name)})`,
+      aoId: rec.ao.id,
+      flightId: rec.flight.id,
+    });
     core.log?.info(`${this.#flights.display(rec.flight)} checked out of ${rec.ao.name} (${by})`);
+  }
+
+  /** The check-in brief as one log line (§9.1). */
+  #logCheckIn(rec: CheckInRec, what: string): void {
+    const primary = rec.primary ? `, primary ${this.#log.name(rec.primary)}` : '';
+    this.#log.add(rec.ao.session, {
+      area: 'checkIn',
+      kind: 'cas.checkIn',
+      summary: `${rec.brief.callsign} ${what}${primary} – ${briefText(rec.brief)}`,
+      aoId: rec.ao.id,
+      flightId: rec.flight.id,
+    });
   }
 
   /** Forwards a host message unchanged, kept for the replay; the sender doesn't get it back. */
@@ -341,4 +425,48 @@ export class CheckIns {
       true,
     );
   }
+}
+
+/** `2× F-16C · 4× GBU-12, 2× AIM-9X · 40 min · codes 1688 · abort LOBSTER`. */
+function briefText(brief: CheckInBrief): string {
+  const types = new Map<string, number>();
+  for (const aircraft of brief.aircraft) {
+    const name = unitDisplayName(aircraft.type);
+    types.set(name, (types.get(name) ?? 0) + 1);
+  }
+  const parts = [[...types].map(([name, n]) => `${String(n)}× ${name}`).join(', ')];
+  const ordnance = brief.ordnance.filter((o) => o.count > 0);
+  if (ordnance.length > 0)
+    parts.push(ordnance.map((o) => `${String(o.count)}× ${o.name}`).join(', '));
+  if (brief.playtimeMin !== null) parts.push(`${String(brief.playtimeMin)} min`);
+  parts.push(`codes ${codesText(brief.laserCodes)}`);
+  if (brief.abortCode) parts.push(`abort ${brief.abortCode}`);
+  if (brief.missionNumber) parts.push(`mission ${brief.missionNumber}`);
+  return parts.join(' · ');
+}
+
+/** `1688`, `1688 (1-2: 1511)`, `none`. */
+function codesText(codes: LaserCodes): string {
+  const own = Object.values(codes.perAircraft);
+  const flight = codes.flight === null ? null : String(codes.flight);
+  if (own.length === 0) return flight ?? 'none';
+  const list = own.map(String).join('/');
+  return flight === null ? list : `${flight} (aircraft ${list})`;
+}
+
+/** ` – threats: SA-8 at …; targets: …` from the filled fields of a situation update. */
+function sitText(update: Extract<Message, { type: 'cas.sitUpdate' }>['body']['update']): string {
+  const fields: [string, string][] = [
+    ['threats', update.threats.text],
+    ['targets', update.targets.text],
+    ['friendlies', update.friendlies.text],
+    ['fires', update.fires],
+    ['clearance authority', update.clearanceAuthority],
+    ['restrictions', update.restrictions],
+    ['hazards', update.hazards],
+  ];
+  const filled = fields.filter(([, text]) => text.trim() !== '');
+  return filled.length === 0
+    ? ''
+    : ` – ${filled.map(([name, text]) => `${name}: ${text.trim()}`).join('; ')}`;
 }

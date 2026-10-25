@@ -4,8 +4,12 @@
 // runs the group's DCS server.
 //
 // Usage (repo root): pnpm relay [--data <folder>] [--port <port>] [--print-remote]
+//                                [--export-log [--csv-semicolon]]
 // Files: <data>/relay.json (port, codes, public address, discovery), cert.pem,
 // key.pem – created on the first start. Default folder: %APPDATA%\SLATE\relay.
+// The CAS log goes to <data>/cas-log/, one JSONL file per session and run,
+// kept `logRetentionDays` (default 30); `--export-log` writes a Markdown and a
+// CSV file next to each (protocol.md §12.1, D7) and exits.
 // With `dcsServerFolder` set, the relay installs the server hook there and
 // writes the discovery announcement (P1.7, dcs/server-hook/README.md); the
 // packaged relay also tells the hook how to start it, so it then starts with
@@ -21,6 +25,12 @@ import { parseArgs } from 'node:util';
 
 import { BUILD } from './build-info.js';
 import { startDiscovery } from './cas-relay/announce.js';
+import {
+  CAS_LOG_FOLDER,
+  CasLogFiles,
+  exportCasLogs,
+  pruneCasLogs,
+} from './cas-relay/cas-log-file.js';
 import { loadRelayFiles, lanAddresses } from './cas-relay/config.js';
 import { Relay } from './cas-relay/relay.js';
 import { announceRemote, remoteRelayBlock } from './cas-relay/remote.js';
@@ -35,6 +45,8 @@ const { values } = parseArgs({
     port: { type: 'string' },
     verbose: { type: 'boolean' },
     'print-remote': { type: 'boolean' },
+    'export-log': { type: 'boolean' },
+    'csv-semicolon': { type: 'boolean' },
   },
 });
 
@@ -67,6 +79,22 @@ async function main(): Promise<void> {
     return;
   }
 
+  const logDir = join(files.dir, CAS_LOG_FOLDER);
+  if (values['export-log']) {
+    const done = await exportCasLogs(logDir, {
+      delimiter: values['csv-semicolon'] ? ';' : ',',
+    });
+    if (done.length === 0) process.stdout.write(`No CAS log files in ${logDir}\n`);
+    for (const file of done) {
+      const lines = file.bad === 1 ? 'line' : 'lines';
+      const bad = file.bad > 0 ? ` (${String(file.bad)} unreadable ${lines} skipped)` : '';
+      process.stdout.write(
+        `${file.source}: ${String(file.entries)} entries${bad}\n  ${file.markdown}\n  ${file.csv}\n`,
+      );
+    }
+    return;
+  }
+
   if (files.remoteRelay !== null) {
     log.info(
       `${name} – announce only: the DCS server announces the relay at ${files.remoteRelay.address}`,
@@ -82,7 +110,19 @@ async function main(): Promise<void> {
     process.exitCode = done ? 0 : 1;
     return;
   }
-  const relay = new Relay({ codes: files.codes, name, log });
+  const prune = () =>
+    pruneCasLogs(logDir, files.logRetentionDays)
+      .then((removed) => {
+        if (removed.length > 0) log.info(`CAS log: removed ${removed.join(', ')}`);
+      })
+      .catch((error: unknown) => {
+        log.warn(`CAS log: can't remove old files: ${String(error)}`);
+      });
+  await prune();
+  // A relay on a Pi may run for weeks: old files go once a day too.
+  setInterval(() => void prune(), 86_400_000).unref();
+  const casLog = await CasLogFiles.open(logDir, Date.now(), log);
+  const relay = new Relay({ codes: files.codes, name, log, casLog });
   const server = await startRelayServer({
     relay,
     port,
@@ -94,6 +134,7 @@ async function main(): Promise<void> {
   log.info(`${name} listening on TCP ${String(server.port)}`);
   if (files.created.length > 0) log.info(`Created ${files.created.join(', ')} in ${files.dir}`);
   log.info(`Config: ${join(files.dir, 'relay.json')}`);
+  log.info(`CAS log: ${logDir} (kept ${String(files.logRetentionDays)} days)`);
   log.info(`LAN:         ${lanAddresses(server.port).join(', ') || '–'}`);
   log.info(`Public:      ${files.publicAddress ?? '– (set publicAddress in relay.json)'}`);
   log.info(`Fingerprint: ${files.fingerprint}`);
@@ -128,6 +169,7 @@ async function main(): Promise<void> {
           log.warn(`Discovery: can't empty the announcement: ${String(error)}`);
         })
         .then(() => server.close())
+        .then(() => casLog.close())
         .then(() => process.exit(0));
     });
   }

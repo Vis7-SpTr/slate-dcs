@@ -14,8 +14,11 @@ The SLATE relay (`protocol.md` §1–§7, CAS §8–§12 from P2): coalition ses
 | `checkins.ts` | Check-in (§9.2, P2.2): lands in an AO, a picked JTAC as primary; check-out, release, `aoClosed`, `flightClosed`; checked-in flights join the AO's audience; situation update and COPY (§9.3); fuel calls (§6.5). |
 | `holds.ts` | Holds and the holding stack (§9.4, P2.2): assign, change, cancel, WILCO; overlaps flagged on both holds; visibility like map entries; a check-out takes the flight's holds along. |
 | `missions.ts` | Fire missions (§10, P2.3): the state machine with one lane per aircraft, owner and command handover, changes after the readback, Type 3 windows on the relay's clock, aborts, laser deconfliction; each pilot gets only his own lane. |
+| `cas-log.ts` | The CAS log (§12, P2.4): every §12.2 entry per session with `seq`, relay and mission time, actor and a readable summary – in memory for `log.request` (a JTAC his AO, a pilot his flight's missions and check-ins, only his own lane, no warnings; pages of 500), and to the log file. Helpers for summaries. |
+| `cas-log-missions.ts` | Mission log entries from what changed between two versions of a mission – the relay's own steps (window over, command moved on a drop-out, a lane gone with its pilot) are logged like a JTAC's command. |
+| `cas-log-file.ts` | The log on disk (D7): one JSONL file per session and relay run in `<data>/cas-log/`, kept `logRetentionDays`; reading back and `--export-log` (Markdown + CSV next to each file). |
 | `codes.ts` | Session codes, participant IDs, tokens, flight IDs and private flight codes. |
-| `config.ts` | The relay's files: `relay.json` (port, codes, public address, discovery settings), `cert.pem`, `key.pem` – created on the first start. |
+| `config.ts` | The relay's files: `relay.json` (port, codes, public address, discovery settings, `logRetentionDays`), `cert.pem`, `key.pem` – created on the first start. |
 | `tls.ts` | Self-signed certificate and its fingerprint (§3.1). |
 | `server.ts` | The WSS transport (`/relay`), pings and the relay's clock. |
 | `announce.ts` | Discovery on the server PC (P1.7, §2): installs the server hook into `dcsServerFolder` and writes the chat lines per coalition; empties them on stop. |
@@ -25,5 +28,7 @@ The SLATE relay (`protocol.md` §1–§7, CAS §8–§12 from P2): coalition ses
 | `aos.test.ts` | JTAC on-station, AO command, off-station rules, map entry visibility and rights, the mission-time anchor (P2.1). |
 | `checkins.test.ts` | Check-in, who sees whose full status (§6.4), situation update, fuel calls, holds and their conflicts, receipts and level-2 confirmations (P2.2). |
 | `missions.test.ts` | Fire missions rule by rule (P2.3). |
-| `missions.simulation.test.ts` | 8 pilots in two flights and 2 JTACs through a whole CAS sequence; no pilot ever gets another aircraft's lane (P2.3). |
+| `missions.simulation.test.ts` | 8 pilots in two flights and 2 JTACs through a whole CAS sequence; no pilot ever gets another aircraft's lane (P2.3); the run's CAS log as a timeline, its export, and what each JTAC and pilot may request (P2.4). |
+| `cas-log.test.ts` | The CAS log rule by rule: each area's entries, actor and mission time, `log.request` rights, ranges and paging (P2.4). |
+| `cas-log-file.test.ts` | Log files, a restart, unreadable lines, retention, `logRetentionDays`, the export (P2.4). |
 | `simulation.test.ts` | 8 pilots + 2 JTACs + 1 red player over 10 simulated minutes, with drop-outs and rejoins; then the 8 pilots in two flights of 4. |

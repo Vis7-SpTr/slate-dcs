@@ -11,6 +11,7 @@ import type { HostSlice } from '@slate-dcs/shared';
 
 import { failed } from '../commands/dispatcher.js';
 import type { CommandOutcome } from '../commands/dispatcher.js';
+import { CAS_LOG_FOLDER, CasLogFiles, pruneCasLogs } from '../cas-relay/cas-log-file.js';
 import { lanAddresses, loadRelayFiles } from '../cas-relay/config.js';
 import { Relay } from '../cas-relay/relay.js';
 import type { RelayLog } from '../cas-relay/relay.js';
@@ -35,6 +36,7 @@ export class HostMode {
   readonly #options: HostModeOptions;
   #relay: Relay | null = null;
   #server: RelayServer | null = null;
+  #casLog: CasLogFiles | null = null;
 
   constructor(options: HostModeOptions) {
     this.#options = options;
@@ -62,7 +64,13 @@ export class HostMode {
     this.#set({ state: 'starting', error: null });
     try {
       const files = await loadRelayFiles(join(this.#options.dataDir, 'relay'));
-      const relay = new Relay({ codes: files.codes, name: this.#options.name, log });
+      // The CAS log like a standalone relay's (§12.1): <data>\relay\cas-log.
+      const logDir = join(files.dir, CAS_LOG_FOLDER);
+      await pruneCasLogs(logDir, files.logRetentionDays).catch((error: unknown) => {
+        log.warn(`CAS log: can't remove old files: ${String(error)}`);
+      });
+      const casLog = await CasLogFiles.open(logDir, Date.now(), log);
+      const relay = new Relay({ codes: files.codes, name: this.#options.name, log, casLog });
       const server = await startRelayServer({
         relay,
         port: this.#options.port ?? files.port,
@@ -70,7 +78,11 @@ export class HostMode {
         certPem: files.certPem,
         keyPem: files.keyPem,
         log,
+      }).catch(async (error: unknown) => {
+        await casLog.close();
+        throw error;
       });
+      this.#casLog = casLog;
       this.#relay = relay;
       this.#server = server;
       this.#set({
@@ -99,10 +111,13 @@ export class HostMode {
 
   async stop(): Promise<CommandOutcome> {
     const server = this.#server;
+    const casLog = this.#casLog;
     this.#server = null;
     this.#relay = null;
+    this.#casLog = null;
     if (server) {
       await server.close();
+      await casLog?.close();
       this.#options.log.info('Host mode off');
     }
     this.#set({

@@ -6,6 +6,7 @@ import { parseMessageText, PROTOCOL_VERSION, ulid } from '@slate-dcs/shared';
 import type { Message, StatusUpdate } from '@slate-dcs/shared';
 
 import type { RelayCodes } from './codes.js';
+import type { CasLogSink } from './core.js';
 import { Relay } from './relay.js';
 import type { RelayConnection } from './relay.js';
 
@@ -23,12 +24,13 @@ export class Clock {
   }
 }
 
-export function makeRelay(clock: Clock, replayLimit?: number): Relay {
+export function makeRelay(clock: Clock, replayLimit?: number, casLog?: CasLogSink): Relay {
   return new Relay({
     codes: CODES,
     name: 'slate-relay test',
     now: () => clock.now,
     ...(replayLimit === undefined ? {} : { replayLimit }),
+    ...(casLog === undefined ? {} : { casLog }),
   });
 }
 

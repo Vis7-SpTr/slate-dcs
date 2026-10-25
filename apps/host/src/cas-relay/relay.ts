@@ -7,11 +7,12 @@
 // standalone (`slate-relay`) and inside a host (host mode).
 
 import { parseMessageText } from '@slate-dcs/shared';
-import type { Coalition, Message } from '@slate-dcs/shared';
+import type { Coalition, LogEntry, Message } from '@slate-dcs/shared';
 
 import { RATE, RelayCore } from './core.js';
 import type { Conn, Member, RelayConnection, RelayLink, RelayOptions } from './core.js';
 import { Aos } from './aos.js';
+import { CasLog } from './cas-log.js';
 import { CheckIns } from './checkins.js';
 import { Flights } from './flights.js';
 import { Holds } from './holds.js';
@@ -56,8 +57,7 @@ type JoinedMessage = Exclude<
       | 'cas.hold.cancelled'
       | 'fm.updated'
       | 'fm.deleted'
-      | 'log.entries'
-      | 'log.request';
+      | 'log.entries';
   }
 >;
 
@@ -65,6 +65,7 @@ export class Relay {
   readonly #core: RelayCore;
   readonly #flights: Flights;
   readonly #aos: Aos;
+  readonly #log: CasLog;
   readonly #entries: MapEntries;
   readonly #checkIns: CheckIns;
   readonly #holds: Holds;
@@ -75,9 +76,15 @@ export class Relay {
   constructor(options: RelayOptions) {
     this.#core = new RelayCore(options);
     this.#flights = new Flights(this.#core);
-    this.#aos = new Aos(this.#core);
+    this.#log = new CasLog(this.#core, this.#flights, options.casLog ?? null);
+    this.#aos = new Aos(this.#core, this.#log);
     this.#entries = new MapEntries(this.#core, this.#aos);
-    const parts = { aos: this.#aos, flights: this.#flights, entries: this.#entries };
+    const parts = {
+      aos: this.#aos,
+      flights: this.#flights,
+      entries: this.#entries,
+      log: this.#log,
+    };
     this.#checkIns = new CheckIns(this.#core, parts);
     this.#holds = new Holds(this.#core, { ...parts, checkIns: this.#checkIns });
     this.#missions = new Missions(this.#core, { ...parts, checkIns: this.#checkIns });
@@ -137,6 +144,11 @@ export class Relay {
     return this.#core.missionTime(session);
   }
 
+  /** The session's CAS log as kept in memory, oldest first (§12). */
+  casLog(session: Coalition): LogEntry[] {
+    return this.#log.all(session);
+  }
+
   /** Counts for logs and tests. */
   stats(): Record<Coalition, { online: number; lost: number; flights: number }> & {
     connections: number;
@@ -190,15 +202,6 @@ export class Relay {
         return;
       case 'session.join':
         this.#sessions.join(conn, message);
-        return;
-      // Built in P2.4; until then a host gets a clear answer.
-      case 'log.request':
-        this.#core.error(
-          conn,
-          'unsupported',
-          `${message.type} is not supported by this relay yet`,
-          message.id,
-        );
         return;
       case 'relay.receipt':
       case 'error':
@@ -319,6 +322,9 @@ export class Relay {
         return;
       case 'msg.received':
         this.#received(member, message);
+        return;
+      case 'log.request':
+        this.#log.request(member, message);
         return;
       case 'fm.create':
       case 'fm.update':

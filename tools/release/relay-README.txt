@@ -14,6 +14,10 @@ Options:  --data <folder>   where relay.json, cert.pem and key.pem live
           --verbose         debug log lines
           --print-remote    print the "remoteRelay" block for a DCS server
                             PC that announces this relay (see below), then exit
+          --export-log      write each CAS log file as Markdown and CSV (see
+                            "CAS log" below), then exit
+          --csv-semicolon   with --export-log: ";" between CSV fields, for a
+                            spreadsheet set to German
 
 First start: relay.json, the certificate and the session codes are created.
 The log shows the codes (blue, red, group) and the fingerprint – players need
@@ -36,6 +40,24 @@ relay.json:
                        for this folder and the data folder (e.g. C:\SLATE\relay).
   remoteRelay          null (default), or a relay hosted somewhere else – see
                        "Relay on another machine" below.
+  logRetentionDays     30 (default): days a CAS log file is kept after its
+                       last entry.
+
+CAS log
+-------
+The relay logs every CAS step – check-ins, situation updates, holds, fire
+missions with each aircraft's clearances and aborts, JOKER/BINGO calls, JTACs
+on and off station – with mission time. It goes to the cas-log folder inside
+the data folder, one file per coalition session and relay start:
+
+  cas-log\cas-log-2026-10-26T19-30-00Z-blue.jsonl
+
+  slate-relay --export-log   (same --data as the relay)
+
+writes a Markdown timeline (.md) and a CSV file (.csv) next to each file.
+Mission times there are local (L): the relay doesn't know the map. From
+SLATE 0.2 on, a JTAC exports his AO's log and a pilot his flight's from the
+app (More → CAS log).
 
 Relay on another machine (Raspberry Pi, VPS)
 --------------------------------------------
