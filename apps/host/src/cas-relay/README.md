@@ -1,10 +1,14 @@
 # cas-relay
 
-The SLATE relay (`protocol.md` §1–§7): coalition sessions, tokens, presence, status routing and flights between the hosts of one group. The same code runs standalone (`slate-relay` on the server PC) and inside a host (host mode).
+The SLATE relay (`protocol.md` §1–§7, CAS §8–§12 from P2): coalition sessions, tokens, presence, status routing and flights between the hosts of one group; AOs, check-ins, missions and the CAS log get their own files on top of `core.ts` in P2.1–P2.4. The same code runs standalone (`slate-relay` on the server PC) and inside a host (host mode).
 
 | File | What |
 |---|---|
-| `relay.ts` | The core: handshake, sessions, tokens, presence, status routing, flights, resync. Knows no sockets – a transport hands it text frames and pongs (WSS server and host mode in P1.6c). State in memory only. |
+| `relay.ts` | The relay a transport talks to (WSS server, host mode, tests): takes text frames and pongs, checks each message and the rate limit, and hands it to its part. Knows no sockets. Split into the files below at the start of P2.1 (25 Oct 2026; code moved only). |
+| `core.ts` | The session core every part shares: connections, participants, coalition sessions, `seq`, the replay buffer, and the outbound helpers (publish to chosen members – also one variant per recipient –, forward unchanged, direct control messages, receipts, errors). State in memory only. |
+| `sessions.ts` | Handshake, join with token check, coalition switch, slot updates, leaving, presence and expiry, the snapshot and catch-up on join (§3–§5). |
+| `status.ts` | Status routing (§6.4): the full package to the own flight, `status.position` to everyone else. |
+| `flights.ts` | Flights (§7): create, join, leave, move, move up, command, end of a flight. |
 | `codes.ts` | Session codes, participant IDs, tokens, flight IDs and private flight codes. |
 | `config.ts` | The relay's files: `relay.json` (port, codes, public address, discovery settings), `cert.pem`, `key.pem` – created on the first start. |
 | `tls.ts` | Self-signed certificate and its fingerprint (§3.1). |
