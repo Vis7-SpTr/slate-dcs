@@ -3,7 +3,8 @@
 // store directly; relay commands go through the relay client and answer once
 // the relay has (P1.6c).
 
-import type { OwnshipOverrides } from '@slate-dcs/shared';
+import { CAS_COMMANDS } from '@slate-dcs/shared';
+import type { CasCommandName, OwnshipOverrides } from '@slate-dcs/shared';
 
 import type { CommandHandlers } from './dispatcher.js';
 import { failed } from './dispatcher.js';
@@ -20,6 +21,15 @@ const NO_RELAY = 'Sessions are not available in demo mode';
 const NO_DCS = 'DCS folders are not available in demo mode';
 const NO_LAN = 'LAN access is not available in demo mode';
 const NO_APP = 'Not available in this build';
+const NOT_BUILT = 'Not built yet – CAS comes with P2.5';
+
+/** The P2 commands, each answering notPossible until the host builds it (P2.5). */
+export function notBuiltHandlers(): Pick<CommandHandlers, CasCommandName> {
+  const handler = () => failed('notPossible', NOT_BUILT);
+  const handlers = {} as Record<CasCommandName, () => CommandOutcome>;
+  for (const name of CAS_COMMANDS) handlers[name] = handler;
+  return handlers;
+}
 
 /** The app's lifecycle (P1.9): updates, quit, uninstall. */
 export interface AppControl {
@@ -54,6 +64,7 @@ export function createHandlers(store: StateStore, options: HandlerOptions = {}):
   };
 
   return {
+    ...notBuiltHandlers(),
     // Relay commands (P1.6c). The host's own relay (host mode) is joined directly.
     'session.join': (args) => {
       const relay = options.relay;

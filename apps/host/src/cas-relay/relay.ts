@@ -290,8 +290,50 @@ export class Relay {
         else this.#flightCommand(member, message);
         return;
       }
+      // Built in P2.1–P2.4; until then a host gets a clear answer.
       case 'fuel.call':
       case 'msg.received':
+      case 'jtac.onStation':
+      case 'jtac.offStation':
+      case 'ao.update':
+      case 'cm.create':
+      case 'cm.update':
+      case 'cm.delete':
+      case 'cas.checkIn':
+      case 'cas.checkOut':
+      case 'cas.release':
+      case 'cas.sitUpdate':
+      case 'cas.sitCopy':
+      case 'cas.hold.assign':
+      case 'cas.hold.update':
+      case 'cas.hold.cancel':
+      case 'cas.hold.wilco':
+      case 'fm.create':
+      case 'fm.update':
+      case 'fm.assign':
+      case 'fm.unassign':
+      case 'fm.brief':
+      case 'fm.readbackCorrect':
+      case 'fm.ackChange':
+      case 'fm.spi':
+      case 'fm.correlated':
+      case 'fm.clear':
+      case 'fm.window':
+      case 'fm.windowRevoke':
+      case 'fm.waitingBda':
+      case 'fm.abort':
+      case 'fm.voiceOnly':
+      case 'fm.bda':
+      case 'fm.ackBda':
+      case 'fm.reattack':
+      case 'fm.complete':
+      case 'fm.cancel':
+      case 'fm.delete':
+      case 'fm.offerCommand':
+      case 'fm.acceptCommand':
+      case 'fm.returnCommand':
+      case 'fm.reclaim':
+      case 'log.request':
         this.#error(
           conn,
           'unsupported',
@@ -313,8 +355,29 @@ export class Relay {
       case 'flight.updated':
       case 'flight.listed':
       case 'flight.closed':
+      case 'ao.created':
+      case 'ao.updated':
+      case 'ao.closed':
+      case 'cm.created':
+      case 'cm.updated':
+      case 'cm.deleted':
+      case 'cas.checkedIn':
+      case 'cas.checkedOut':
+      case 'cas.hold.updated':
+      case 'cas.hold.cancelled':
+      case 'fm.updated':
+      case 'fm.deleted':
+      case 'log.entries':
         this.#error(conn, 'forbidden', `Only the relay sends ${message.type}`, message.id);
         return;
+      default:
+        // Every message type is handled above; a new one fails to compile here.
+        this.#error(
+          conn,
+          'unsupported',
+          `Unknown message ${message satisfies never as string}`,
+          null,
+        );
     }
   }
 
@@ -1015,7 +1078,9 @@ export class Relay {
         ],
         flights: own ? [...open, own] : open,
         aos: [],
-        you: { flight: own, checkIns: [], openMissions: [] },
+        mapEntries: [],
+        holds: [],
+        you: { flight: own, checkIn: null, openMissions: [] },
       },
     });
     // Catch-up, sorted by seq: what he missed (if the relay still has all of

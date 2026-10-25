@@ -15,8 +15,12 @@ import {
   RoleId,
   Seq,
 } from './common.js';
+import { Ao } from './aos.js';
+import { CheckIn, Hold } from './checkins.js';
 import { defineMessage } from './envelope.js';
 import { Flight, FlightSummary } from './flights.js';
+import { MapEntry } from './map-entries.js';
+import { FireMission } from './missions.js';
 
 // ---------------------------------------------------------------------------
 // Building blocks (shared ones live in common.ts)
@@ -93,9 +97,9 @@ export type Participant = z.infer<typeof Participant>;
  * `session.state` (relay → host, right after `session.joined`): a full snapshot;
  * afterwards only changes are sent (§4.5).
  *
- * AOs (§8), check-ins (§9), missions (§10) and the flight plan (§11) are
- * accepted as-is for now and get their own schemas with their message families
- * in P2/P3.
+ * The flight plan (§11) is accepted as-is until P3. `mapEntries`, `holds` and
+ * `you.checkIn` were added in P2 and default to empty, so a P1 relay's
+ * snapshot still parses.
  */
 export const SessionState = defineMessage(
   'session.state',
@@ -105,11 +109,18 @@ export const SessionState = defineMessage(
     participants: z.array(Participant),
     /** Open flights as summaries, plus the player's own flight in full (§4.5). */
     flights: z.array(z.union([Flight, FlightSummary])),
-    aos: z.array(z.unknown()),
+    /** Active AOs (§8.1); the join code only for JTACs. */
+    aos: z.array(Ao),
+    /** Map entries this player may see (§8.4). */
+    mapEntries: z.array(MapEntry).default([]),
+    /** Holds this player may see (§9.4). */
+    holds: z.array(Hold).default([]),
     you: z.object({
       flight: Flight.nullable(),
-      checkIns: z.array(z.unknown()),
-      openMissions: z.array(z.unknown()),
+      /** His flight's check-in – at most one (§9.2). */
+      checkIn: CheckIn.nullable().default(null),
+      /** Missions assigned to his flight (pilot) or all of his AO's (JTAC), §10.9. */
+      openMissions: z.array(FireMission),
       flightPlan: z.unknown().nullable().optional(),
     }),
   }),

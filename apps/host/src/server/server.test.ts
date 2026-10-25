@@ -210,7 +210,7 @@ describe('host server – screens (protocol.md §14)', () => {
   it('answers unknownCommand and badCommand, and drops frames without an ID', async () => {
     const screen = await connect();
     await screen.waitFor(1);
-    screen.send({ t: 'cmd', id: ID_1, body: { cmd: 'cas.checkIn', args: {} } });
+    screen.send({ t: 'cmd', id: ID_1, body: { cmd: 'fp.push', args: {} } });
     screen.send({ t: 'cmd', id: ID_2, body: { cmd: 'settings.set', args: {} } });
     screen.send('{not json');
     screen.send({ t: 'cmd', body: { cmd: 'settings.set', args: { uiScale: 2 } } });

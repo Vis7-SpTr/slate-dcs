@@ -288,7 +288,7 @@ describe('flights in session.state', () => {
       participants: [],
       flights,
       aos: [],
-      you: { flight: ownFlight, checkIns: [], openMissions: [] },
+      you: { flight: ownFlight, checkIn: null, openMissions: [] },
     });
   const summary = { flightId: 'f_x', display: 'Pontiac 1', memberCount: 1, types: ['F-16C_50'] };
 

@@ -4,9 +4,24 @@
 
 import { z } from 'zod';
 
-import { Coalition, Nick, RoleId } from './common.js';
+import { AoUpdate, JtacOffStation, JtacOnStation } from './aos.js';
+import { AoId } from './cas-common.js';
+import { LogRequest } from './cas-log.js';
+import { BriefField } from './cas-slices.js';
+import {
+  CasHoldAssign,
+  CasHoldCancel,
+  CasHoldUpdate,
+  CasHoldWilco,
+  CasRelease,
+  CheckInBrief,
+  SitUpdate,
+} from './checkins.js';
+import { Coalition, Nick, Pid, RoleId } from './common.js';
 import { MessageId } from './envelope.js';
-import { FlightCreate, FlightJoin, FlightMove } from './flights.js';
+import { FlightCreate, FlightId, FlightJoin, FlightMove } from './flights.js';
+import { CmCreate, CmDelete, CmUpdate } from './map-entries.js';
+import { FM_COMMANDS } from './missions.js';
 import { RelayFingerprint, SessionCode } from './session.js';
 import { SLICE_SCHEMAS, SpeedSelection, TimeDisplay, UiScale } from './slices.js';
 import { Fuel, Position, WeaponStation } from './status.js';
@@ -43,6 +58,10 @@ export const SLICE_NAMES = [
   'mission',
   'dcs',
   'settings',
+  'cas',
+  'missions',
+  'casLog',
+  'fuelCalls',
 ] as const;
 export const SliceName = z.enum(SLICE_NAMES);
 export type SliceName = z.infer<typeof SliceName>;
@@ -146,6 +165,59 @@ export const Command = z.discriminatedUnion('cmd', [
         message: 'Set at least one setting',
       }),
   ),
+  // ----- P2: CAS (protocol.md §6.5, §8–§12). Relay-bound ones reuse the relay bodies.
+  // JTAC on-station and AOs (§8).
+  command('jtac.onStation', JtacOnStation.shape.body),
+  command('jtac.offStation', JtacOffStation.shape.body),
+  command('ao.update', AoUpdate.shape.body),
+  // Map entries (§8.4).
+  command('cm.create', CmCreate.shape.body),
+  command('cm.update', CmUpdate.shape.body),
+  command('cm.delete', CmDelete.shape.body),
+  // Check-in (§9.1, §9.2). The brief is a draft in the host; `cas.setBrief` types
+  // over fields (marked edited), `reset` hands them back to the live values.
+  command(
+    'cas.setBrief',
+    z.object({ changes: CheckInBrief.partial(), reset: z.array(BriefField) }),
+  ),
+  /** Sends the draft – live fields refreshed now – to one JTAC or one AO. */
+  command(
+    'cas.checkIn',
+    z.object({
+      target: z.discriminatedUnion('scope', [
+        z.object({ scope: z.literal('pid'), id: Pid }),
+        z.object({ scope: z.literal('ao'), id: AoId }),
+      ]),
+    }),
+  ),
+  command('cas.checkOut', Empty),
+  command('cas.release', CasRelease.shape.body),
+  // Situation update (§9.3): to one flight, or the whole AO with `flightId: null`.
+  command(
+    'cas.sitUpdate',
+    z.object({ aoId: AoId, flightId: FlightId.nullable(), update: SitUpdate }),
+  ),
+  /** COPY for a situation update; `id` = its message ID from the `cas` slice. */
+  command('cas.sitCopy', z.object({ id: MessageId })),
+  // Holds (§9.4).
+  command('cas.hold.assign', CasHoldAssign.shape.body),
+  command('cas.hold.update', CasHoldUpdate.shape.body),
+  command('cas.hold.cancel', CasHoldCancel.shape.body),
+  command('cas.hold.wilco', CasHoldWilco.shape.body),
+  // Fuel calls (§6.5): the host fills in the internal fuel; levels and dismiss are host only.
+  command('fuel.call', z.object({ call: z.enum(['joker', 'bingo']) })),
+  command(
+    'fuel.setLevels',
+    z.object({
+      jokerKg: z.number().nonnegative().nullable(),
+      bingoKg: z.number().nonnegative().nullable(),
+    }),
+  ),
+  command('fuel.dismiss', Empty),
+  // Fire missions (§10) – forwarded unchanged.
+  ...FM_COMMANDS.map((message) => command(message.shape.type.value, message.shape.body)),
+  // CAS log (§12.3) – the host keeps a local copy; export follows in P2.4.
+  command('log.request', LogRequest.shape.body),
 ]);
 export type Command = z.infer<typeof Command>;
 export type CommandName = Command['cmd'];
@@ -153,6 +225,18 @@ export type CommandName = Command['cmd'];
 const COMMAND_NAMES: ReadonlySet<string> = new Set(
   Command.options.map((option) => option.shape.cmd.value),
 );
+
+/**
+ * The P2 commands (CAS, fuel calls, log). Until the host builds them (P2.5)
+ * they answer `notPossible`; then the relay-bound ones join `RELAY_COMMANDS`.
+ */
+export type CasCommandName = Extract<
+  CommandName,
+  `${'jtac' | 'ao' | 'cm' | 'cas' | 'fuel' | 'fm' | 'log'}.${string}`
+>;
+export const CAS_COMMANDS: readonly CasCommandName[] = Command.options
+  .map((option) => option.shape.cmd.value)
+  .filter((name): name is CasCommandName => /^(jtac|ao|cm|cas|fuel|fm|log)\./.test(name));
 
 /** Commands the host forwards to the relay; their `cmd.result` waits for its answer (§14.5). */
 export const RELAY_COMMANDS: ReadonlySet<CommandName> = new Set([

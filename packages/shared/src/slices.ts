@@ -2,10 +2,17 @@
 // Contents of the host's state slices (protocol.md §14.3). The host owns them;
 // screens get them in `state.snapshot` and `state.update`. Slices grow with
 // their packages: session/flight/traffic with the relay (P1.6), ownship status
-// and mission with the Lua bridge (P1.2).
+// and mission with the Lua bridge (P1.2), the CAS slices with P2 (cas-slices.ts).
 
 import { z } from 'zod';
 
+import {
+  CasLogSlice,
+  CasSlice,
+  defaultCasSlices,
+  FuelCallsSlice,
+  MissionsSlice,
+} from './cas-slices.js';
 import { AircraftInfo, Coalition, EpochMs, Pid } from './common.js';
 import { Flight, FlightSummary } from './flights.js';
 import { Participant, RelayFingerprint, SessionCode } from './session.js';
@@ -350,6 +357,10 @@ export const SLICE_SCHEMAS = {
   mission: MissionSlice,
   dcs: DcsSlice,
   settings: SettingsSlice,
+  cas: CasSlice,
+  missions: MissionsSlice,
+  casLog: CasLogSlice,
+  fuelCalls: FuelCallsSlice,
 } as const;
 
 /** State of a host that just started. */
@@ -362,8 +373,13 @@ export function defaultSlices(build: string): {
   mission: MissionSlice;
   dcs: DcsSlice;
   settings: SettingsSlice;
+  cas: CasSlice;
+  missions: MissionsSlice;
+  casLog: CasLogSlice;
+  fuelCalls: FuelCallsSlice;
 } {
   return {
+    ...defaultCasSlices(),
     host: {
       build,
       bridge: { state: 'waiting', version: null, dcsVersion: null },

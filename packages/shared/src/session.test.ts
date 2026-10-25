@@ -192,7 +192,7 @@ describe('session.state', () => {
     ],
     flights: [],
     aos: [],
-    you: { flight: null, checkIns: [], openMissions: [] },
+    you: { flight: null, checkIn: null, openMissions: [] },
   };
   const parse = (body: unknown) => SessionState.safeParse(message('session.state', body));
 
@@ -225,7 +225,7 @@ describe('session.state', () => {
     ['participants not a list', { participants: {} }],
     ['an unknown presence', { participants: [{ ...state.participants[0], presence: 'away' }] }],
     ['no "you"', { you: undefined }],
-    ['"you" without check-ins', { you: { flight: null, openMissions: [] } }],
+    ['"you" without open missions', { you: { flight: null, checkIn: null } }],
   ])('rejects %s', (_why, change) => {
     expect(parse({ ...state, ...change }).success).toBe(false);
   });

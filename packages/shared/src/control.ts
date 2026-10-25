@@ -36,6 +36,8 @@ export const ERROR_CODES = [
   'rateLimited',
   'alreadyInFlight',
   'flightFull',
+  'inUse',
+  'alreadyOnStation',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 

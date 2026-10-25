@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { defaultSlices, RELAY_COMMANDS } from '@slate-dcs/shared';
+import { CAS_COMMANDS, defaultSlices, RELAY_COMMANDS } from '@slate-dcs/shared';
 import type { Command } from '@slate-dcs/shared';
 import { describe, expect, it } from 'vitest';
 
@@ -131,6 +131,15 @@ describe('relay commands before the relay exists', () => {
     const { store, run } = setup();
     const outcome = await run(command);
     expect(outcome).toMatchObject({ ok: false, error: { code: 'notConnected' } });
+    expect(store.seq).toBe(0);
+  });
+});
+
+describe('P2 commands before P2.5', () => {
+  it.each(CAS_COMMANDS)('%s answers notPossible and changes nothing', async (name) => {
+    const { store } = setup();
+    const handler = createHandlers(store)[name] as (args: unknown) => unknown;
+    expect(await handler({})).toMatchObject({ ok: false, error: { code: 'notPossible' } });
     expect(store.seq).toBe(0);
   });
 });

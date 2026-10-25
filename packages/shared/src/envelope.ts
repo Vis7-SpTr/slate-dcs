@@ -69,6 +69,11 @@ export const EnvelopeBase = z.object({
   seq: z.int().nonnegative().optional(),
   /** Set by the relay: its clock when it received the message. */
   rts: EpochMs.optional(),
+  /**
+   * The sending host's mission time at `ts` while a DCS mission runs, else
+   * `null` (protocol.md §1.4). Optional, so older hosts still parse.
+   */
+  mt: z.number().nonnegative().nullable().optional(),
 });
 
 /** Envelope of this protocol version (`v` = PROTOCOL_VERSION). */

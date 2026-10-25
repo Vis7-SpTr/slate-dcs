@@ -3,6 +3,23 @@
 
 import { z } from 'zod';
 
+import { AoClosed, AoCreated, AoUpdate, AoUpdated, JtacOffStation, JtacOnStation } from './aos.js';
+import { LogEntries, LogRequest } from './cas-log.js';
+import {
+  CasCheckedIn,
+  CasCheckedOut,
+  CasCheckIn,
+  CasCheckOut,
+  CasHoldAssign,
+  CasHoldCancel,
+  CasHoldCancelled,
+  CasHoldUpdate,
+  CasHoldUpdated,
+  CasHoldWilco,
+  CasRelease,
+  CasSitCopy,
+  CasSitUpdate,
+} from './checkins.js';
 import { ErrorMessage, Hello, MsgReceived, Reject, RelayReceipt, Welcome } from './control.js';
 import { EnvelopeBase } from './envelope.js';
 import {
@@ -16,6 +33,36 @@ import {
   FlightMoveUp,
   FlightUpdated,
 } from './flights.js';
+import { CmCreate, CmCreated, CmDelete, CmDeleted, CmUpdate, CmUpdated } from './map-entries.js';
+import {
+  FmAbort,
+  FmAcceptCommand,
+  FmAckBda,
+  FmAckChange,
+  FmAssign,
+  FmBda,
+  FmBrief,
+  FmCancel,
+  FmClear,
+  FmComplete,
+  FmCorrelated,
+  FmCreate,
+  FmDelete,
+  FmDeleted,
+  FmOfferCommand,
+  FmReadbackCorrect,
+  FmReattack,
+  FmReclaim,
+  FmReturnCommand,
+  FmSpi,
+  FmUnassign,
+  FmUpdate,
+  FmUpdated,
+  FmVoiceOnly,
+  FmWaitingBda,
+  FmWindow,
+  FmWindowRevoke,
+} from './missions.js';
 import { PROTOCOL_VERSION } from './protocol.js';
 import {
   SessionClosed,
@@ -67,6 +114,65 @@ export const Message = z.discriminatedUnion('type', [
   FlightUpdated,
   FlightListed,
   FlightClosed,
+  // JTAC on-station and AOs (§8.1–§8.3)
+  JtacOnStation,
+  JtacOffStation,
+  AoCreated,
+  AoUpdate,
+  AoUpdated,
+  AoClosed,
+  // Map entries (§8.4, §8.5)
+  CmCreate,
+  CmCreated,
+  CmUpdate,
+  CmUpdated,
+  CmDelete,
+  CmDeleted,
+  // Check-in, situation update, holds (§9)
+  CasCheckIn,
+  CasCheckedIn,
+  CasCheckOut,
+  CasRelease,
+  CasCheckedOut,
+  CasSitUpdate,
+  CasSitCopy,
+  CasHoldAssign,
+  CasHoldUpdate,
+  CasHoldCancel,
+  CasHoldUpdated,
+  CasHoldCancelled,
+  CasHoldWilco,
+  // Fire missions (§10)
+  FmCreate,
+  FmUpdate,
+  FmAssign,
+  FmUnassign,
+  FmBrief,
+  FmReadbackCorrect,
+  FmAckChange,
+  FmSpi,
+  FmCorrelated,
+  FmClear,
+  FmWindow,
+  FmWindowRevoke,
+  FmWaitingBda,
+  FmAbort,
+  FmVoiceOnly,
+  FmBda,
+  FmAckBda,
+  FmReattack,
+  FmComplete,
+  FmCancel,
+  FmDelete,
+  FmOfferCommand,
+  FmAcceptCommand,
+  FmReturnCommand,
+  FmReclaim,
+  FmUpdated,
+  FmDeleted,
+  // CAS log (§12)
+  LogRequest,
+  LogEntries,
 ]);
 export type Message = z.infer<typeof Message>;
 export type MessageTypeName = Message['type'];

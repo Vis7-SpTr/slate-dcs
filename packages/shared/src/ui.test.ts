@@ -291,7 +291,7 @@ describe('parseScreenMessage (host side)', () => {
   });
 
   it('answers unknownCommand for a command it does not know', () => {
-    expect(parseScreenMessage(cmd('cas.checkIn', {}))).toMatchObject({
+    expect(parseScreenMessage(cmd('fp.push', {}))).toMatchObject({
       ok: false,
       reply: { id: ID_1, code: 'unknownCommand' },
     });
