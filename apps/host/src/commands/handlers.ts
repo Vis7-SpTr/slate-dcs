@@ -12,7 +12,7 @@ import type { CommandOutcome } from './dispatcher.js';
 import type { Updater } from '../app/updates.js';
 import type { DcsIntegration } from '../dcs-integration/service.js';
 import type { LanAccess } from '../lan/lan.js';
-import type { RelayClient } from '../session/client.js';
+import type { CasCommand, RelayClient } from '../session/client.js';
 import type { Discovery } from '../session/discovery.js';
 import type { HostMode } from '../session/host-mode.js';
 import type { StateStore } from '../state/store.js';
@@ -21,13 +21,20 @@ const NO_RELAY = 'Sessions are not available in demo mode';
 const NO_DCS = 'DCS folders are not available in demo mode';
 const NO_LAN = 'LAN access is not available in demo mode';
 const NO_APP = 'Not available in this build';
-const NOT_BUILT = 'Not built yet – CAS comes with P2.5';
+const NO_CAS = 'CAS needs a session – not available in demo mode';
 
-/** The P2 commands, each answering notPossible until the host builds it (P2.5). */
-export function notBuiltHandlers(): Pick<CommandHandlers, CasCommandName> {
-  const handler = () => failed('notPossible', NOT_BUILT);
-  const handlers = {} as Record<CasCommandName, () => CommandOutcome>;
-  for (const name of CAS_COMMANDS) handlers[name] = handler;
+/** The P2 commands (§14.7, P2.5): all through the relay client's CAS part. */
+export function casHandlers(
+  client: () => RelayClient | null,
+): Pick<CommandHandlers, CasCommandName> {
+  const handlers = {} as Record<
+    CasCommandName,
+    (args: unknown) => Promise<CommandOutcome> | CommandOutcome
+  >;
+  for (const name of CAS_COMMANDS) {
+    handlers[name] = (args) =>
+      client()?.cas({ cmd: name, args } as CasCommand) ?? failed('notConnected', NO_CAS);
+  }
   return handlers;
 }
 
@@ -64,7 +71,7 @@ export function createHandlers(store: StateStore, options: HandlerOptions = {}):
   };
 
   return {
-    ...notBuiltHandlers(),
+    ...casHandlers(() => options.relay?.client ?? null),
     // Relay commands (P1.6c). The host's own relay (host mode) is joined directly.
     'session.join': (args) => {
       const relay = options.relay;

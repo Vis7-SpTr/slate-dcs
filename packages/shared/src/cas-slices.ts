@@ -5,7 +5,7 @@
 import { z } from 'zod';
 
 import { Ao } from './aos.js';
-import { AoId, Callsign } from './cas-common.js';
+import { AoId, Callsign, HoldId } from './cas-common.js';
 import { LogEntry } from './cas-log.js';
 import { CheckIn, CheckInBrief, Hold, SitUpdate } from './checkins.js';
 import { EpochMs, Pid } from './common.js';
@@ -63,6 +63,8 @@ export const CasSlice = z.object({
   briefDraft: z.object({ brief: CheckInBrief, edited: z.array(BriefField) }).nullable(),
   /** Confirmations of the CAS messages this host sent, newest last. */
   deliveries: z.array(Delivery),
+  /** WILCO for holds (§9.4) – a JTAC sees who acknowledged his holds (added P2.5). */
+  holdWilcos: z.array(z.object({ holdId: HoldId, pid: Pid, at: EpochMs })).default([]),
 });
 export type CasSlice = z.infer<typeof CasSlice>;
 
@@ -116,6 +118,7 @@ export function defaultCasSlices(): {
       sitUpdates: [],
       briefDraft: null,
       deliveries: [],
+      holdWilcos: [],
     },
     missions: { missions: [] },
     casLog: { entries: [] },

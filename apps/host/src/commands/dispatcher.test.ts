@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { CommandDispatcher, failed } from './dispatcher.js';
-import { notBuiltHandlers } from './handlers.js';
+import { casHandlers } from './handlers.js';
 import type { CommandHandlers } from './dispatcher.js';
 
 const ID_1 = '01JABD2K7Q0M3N4P5R6S7T8V9W';
@@ -14,7 +14,7 @@ const setZulu = { cmd: 'settings.set', args: { timeDisplay: 'zulu' } } as const;
 function handlers(settingsSet: CommandHandlers['settings.set']): CommandHandlers {
   const ok = () => ({ ok: true as const });
   return {
-    ...notBuiltHandlers(),
+    ...casHandlers(() => null),
     'session.join': ok,
     'session.leave': ok,
     'session.host': ok,

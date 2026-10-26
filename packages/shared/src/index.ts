@@ -311,6 +311,7 @@ export {
   HOLD_TURN_RADIUS_M,
   holdArea,
   holdsConflict,
+  keyholePoint,
   keyholePosition,
   resolvePoint,
 } from './cas-geo.js';
@@ -334,11 +335,30 @@ export type { MessageTypeName, ParseFailureCode, ParseResult } from './messages.
 
 export {
   formatTimeOfDay,
+  gridConvergenceDeg,
+  gridScale,
   localTimeOfDay,
+  MAP_CENTRAL_MERIDIAN_DEG,
   MAP_UTC_OFFSET_HOURS,
   mapUtcOffsetHours,
   zuluTimeOfDay,
 } from './maps.js';
+
+export {
+  COORD_STYLES,
+  coordStyle,
+  formatCoord,
+  formatDd,
+  formatDdm,
+  formatDms,
+  formatElevationFt,
+  formatMgrs,
+  formatPosition,
+  JTAC_COORD_STYLE,
+  parseCoordinates,
+  parseMgrs,
+} from './coords.js';
+export type { CoordFormat, CoordStyle } from './coords.js';
 export {
   ANNOUNCE_JOIN_MS,
   ANNOUNCE_PREFIX,
@@ -371,9 +391,14 @@ export type { BridgeParseResult } from './bridge.js';
 export {
   AIRFRAMES,
   airframe,
+  defaultBingoKg,
+  FUEL_CALL_DEFAULTS,
   FuelUnit,
   fuelUnit,
   fuelWeights,
+  isRotary,
+  KG_PER_LB,
+  ROTARY_TYPES,
   unitDisplayName,
 } from './airframes.js';
 export type { Airframe } from './airframes.js';

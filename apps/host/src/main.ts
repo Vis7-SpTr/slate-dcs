@@ -5,7 +5,8 @@
 // (P1.7), LAN access with QR pairing (P1.8), and – installed – Velopack's
 // hooks, updates, quit and uninstall (P1.9).
 // Usage (repo root): pnpm start, or pnpm dev while developing. `--demo` fills
-// in demo data for layout tests instead of listening to DCS (see demo.ts).
+// in demo data for layout tests instead of listening to DCS (see demo.ts);
+// `--demo=jtac` shows the JTAC's CAS picture (pnpm start:demo:jtac).
 //
 // Installed (P1.9) SLATE runs without a window: it logs to
 // %APPDATA%\SLATE\logs\slate.log and opens its page in the browser; a second
@@ -51,7 +52,9 @@ const port = Number(process.env['SLATE_PORT'] ?? DEFAULT_PORTS.hostUi);
 const bridgePort = Number(process.env['SLATE_BRIDGE_PORT'] ?? DEFAULT_PORTS.bridge);
 const uiDir = resolve(process.env['SLATE_UI_DIR'] ?? resourcePath('ui'));
 const luaDir = resolve(process.env['SLATE_LUA_DIR'] ?? resourcePath('lua'));
-const demo = process.argv.includes('--demo');
+const demoArg = process.argv.find((arg) => arg === '--demo' || arg.startsWith('--demo='));
+const demo = demoArg !== undefined;
+const demoKind = demoArg === '--demo=jtac' ? 'jtac' : 'pilot';
 const dataDir = defaultDataDir();
 const pageUrl = `http://127.0.0.1:${String(port)}/`;
 
@@ -107,7 +110,7 @@ async function main(): Promise<void> {
   let stopDemo = (): void => undefined;
   let stopRelay = (): Promise<void> => Promise.resolve();
   if (demo) {
-    applyDemoState(store);
+    applyDemoState(store, Date.now(), demoKind);
     stopDemo = startDemoTicker(store);
   }
   // Demo mode never touches the real Saved Games folder and joins no session.

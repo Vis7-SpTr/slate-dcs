@@ -53,6 +53,51 @@ export function unitDisplayName(type: string): string {
   return AIRFRAMES[type]?.name ?? OTHER_UNIT_NAMES[type] ?? type;
 }
 
+/**
+ * Rotary wing for the bingo default (protocol.md §6.5, R9): the DCS
+ * helicopter types players fly. The bridge doesn't report the category, so
+ * every type not listed counts as fixed wing. Type names as DCS reports them
+ * (`LoGetSelfData().Name`) – check new ones in More → DCS while in the slot.
+ */
+export const ROTARY_TYPES: ReadonlySet<string> = new Set([
+  'AH-64D_BLK_II',
+  'UH-1H',
+  'Mi-8MT',
+  'Mi-24P',
+  'Ka-50',
+  'Ka-50_3',
+  'SA342M',
+  'SA342L',
+  'SA342Mistral',
+  'SA342Minigun',
+  'OH58D',
+  'CH-47Fbl1',
+]);
+
+export function isRotary(type: string | null | undefined): boolean {
+  return type !== null && type !== undefined && ROTARY_TYPES.has(type);
+}
+
+/** kg per lb. */
+export const KG_PER_LB = 0.453_592_37;
+
+/**
+ * Fuel-call defaults (§6.5, D8): bingo 2000 lbs fixed wing, 750 lbs rotary
+ * wing – 907 / 340 kg on kg-gauge airframes; joker has none.
+ */
+export const FUEL_CALL_DEFAULTS = {
+  bingoLbs: { fixed: 2000, rotary: 750 },
+  bingoKg: { fixed: 907, rotary: 340 },
+} as const;
+
+/** The bingo default in kg for a DCS unit type, in its gauge's round number. */
+export function defaultBingoKg(type: string | null | undefined): number {
+  const kind = isRotary(type) ? 'rotary' : 'fixed';
+  return fuelUnit(type) === 'lbs'
+    ? FUEL_CALL_DEFAULTS.bingoLbs[kind] * KG_PER_LB
+    : FUEL_CALL_DEFAULTS.bingoKg[kind];
+}
+
 /** Fuel unit for a DCS unit type; kg where the airframe is unknown. */
 export function fuelUnit(type: string | null | undefined): FuelUnit {
   return airframe(type)?.fuelUnit ?? 'kg';

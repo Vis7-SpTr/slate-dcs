@@ -6,6 +6,13 @@
 // and rejoins with its token when the link drops. A join from the server's
 // announcement (discovery, §2) tries the LAN address first, then the public
 // one, and follows a coalition change with `session.switch` (§5).
+//
+// CAS (P2.5): every CAS message goes into the `cas`, `missions` and
+// `fuelCalls` slices (cas-state.ts); CAS commands go out with `ack: true`
+// and their ticks are kept (§1.2); received `ack` messages are confirmed with
+// `msg.received`. Every message carries the mission time `mt` (§1.4). The
+// check-in brief draft, JOKER/BINGO and the CAS log copy live in brief.ts,
+// fuel-calls.ts and cas-log-copy.ts.
 
 import {
   parseMessageText,
@@ -18,6 +25,7 @@ import {
 import type {
   AircraftInfo,
   Address,
+  CasCommandName,
   Coalition,
   Command,
   Flight,
@@ -31,6 +39,12 @@ import { failed } from '../commands/dispatcher.js';
 import type { CommandOutcome } from '../commands/dispatcher.js';
 import type { Relay } from '../cas-relay/relay.js';
 import type { StateStore } from '../state/store.js';
+import { BriefDraft } from './brief.js';
+import { CasLogCopy } from './cas-log-copy.js';
+import type { LogScope } from './cas-log-copy.js';
+import { CasState } from './cas-state.js';
+import type { Me } from './cas-state.js';
+import { FuelCalls } from './fuel-calls.js';
 import { dialLocal, dialWss, FingerprintError, normalizeAddress } from './link.js';
 import type { ClientLink, LinkEvents } from './link.js';
 import type { TokenStore } from './tokens.js';
@@ -56,9 +70,23 @@ type FlightCommand = Extract<
   Command,
   { cmd: 'flight.create' | 'flight.join' | 'flight.leave' | 'flight.move' | 'flight.moveUp' }
 >;
+export type CasCommand = Extract<Command, { cmd: CasCommandName }>;
 
 /** DCS slots that make a player a JTAC (§5: joining one leaves the flight). */
 const JTAC_SLOTS = new Set(['forward_observer', 'artillery_commander', 'observer']);
+
+/**
+ * The role rule (§5, from P2): the slot decides while there is one – a JTAC
+ * slot makes a JTAC, any other slot a pilot; the role picked at the join
+ * applies only without a slot.
+ */
+export function roleFor(aircraft: AircraftInfo | null, joined: string): string {
+  if (!aircraft) return joined;
+  return JTAC_SLOTS.has(aircraft.type) ? 'jtac' : 'pilot';
+}
+
+/** `msg.received` sent per tick at most – a long replay mustn't hit the rate limit (§1.3). */
+const RECEIPTS_PER_TICK = 5;
 
 /** Reconnect delays after the link drops, then the last one again. */
 const RECONNECT_MS = [1000, 2000, 5000, 10_000, 20_000, 30_000];
@@ -94,7 +122,7 @@ interface Joined {
 }
 
 interface Pending {
-  resolve: (outcome: CommandOutcome) => void;
+  resolve: (outcome: CommandOutcome, reply: Message | null) => void;
   timer: ReturnType<typeof setTimeout>;
 }
 
@@ -117,6 +145,14 @@ export class RelayClient {
   #attempt = 0;
   /** Bumped on every join/leave, so an old link's events are ignored. */
   #epoch = 0;
+  readonly #cas: CasState;
+  readonly #brief: BriefDraft;
+  readonly #fuel: FuelCalls;
+  readonly #logCopy: CasLogCopy;
+  /** `msg.received` waiting to go out (§1.2). */
+  #receipts: string[] = [];
+  /** IDs of recent own `ack` messages: their echoes need no `msg.received`. */
+  readonly #ownAck = new Set<string>();
 
   constructor(options: RelayClientOptions) {
     this.#store = options.store;
@@ -125,6 +161,10 @@ export class RelayClient {
     this.#app = options.app;
     this.#now = options.now ?? Date.now;
     this.#dial = options.dial ?? dialWss;
+    this.#cas = new CasState(this.#store, this.#now);
+    this.#brief = new BriefDraft(this.#store);
+    this.#fuel = new FuelCalls(this.#store, this.#now);
+    this.#logCopy = new CasLogCopy(this.#store, (body) => this.#logRequest(body));
   }
 
   /** `true` while joined to the relay running in this host. */
@@ -227,12 +267,17 @@ export class RelayClient {
    * `session.update` when the own slot changed (§5).
    */
   tick(): void {
+    this.#fuel.tick();
     const joined = this.#joined;
     if (!joined) return;
+    this.#brief.refresh();
+    for (const re of this.#receipts.splice(0, RECEIPTS_PER_TICK)) {
+      joined.link.send(this.#frame('msg.received', {}, joined, { scope: 'relay' }, { re }));
+    }
     const ownship = this.#store.get('ownship');
 
     const aircraft = ownship.aircraft;
-    const role = aircraft && JTAC_SLOTS.has(aircraft.type) ? 'jtac' : joined.join.role;
+    const role = roleFor(aircraft, joined.join.role);
     if (JSON.stringify(aircraft) !== JSON.stringify(joined.aircraft) || role !== joined.role) {
       joined.aircraft = aircraft;
       joined.role = role;
@@ -265,10 +310,155 @@ export class RelayClient {
   /** Ends the link without leaving (host shutdown): the relay keeps our place. */
   close(): void {
     clearTimeout(this.#reconnectTimer);
+    this.#logCopy.stop();
     this.#epoch += 1;
     this.#joined?.link.close();
     this.#joined = null;
     this.#target = null;
+  }
+
+  // -------------------------------------------------------------------------
+  // CAS (P2.5)
+
+  /**
+   * A CAS command of a screen (§14.7). The brief draft and the fuel levels are
+   * host only; the rest goes to the relay with `ack: true`, its ticks kept in
+   * `cas.deliveries`, and answers once the relay has (its reply or receipt).
+   */
+  async cas(command: CasCommand): Promise<CommandOutcome> {
+    switch (command.cmd) {
+      case 'cas.setBrief': {
+        const result = this.#brief.set(command.args.changes, command.args.reset);
+        return result.ok ? { ok: true } : failed('badCommand', result.text);
+      }
+      case 'fuel.setLevels':
+        this.#fuel.setLevels(command.args.jokerKg, command.args.bingoKg);
+        return { ok: true };
+      case 'fuel.dismiss':
+        this.#fuel.dismiss();
+        return { ok: true };
+      default:
+        break;
+    }
+    const joined = this.#joined;
+    if (!joined) return failed('notConnected', 'Not in a session');
+    switch (command.cmd) {
+      case 'cas.checkIn': {
+        // Live fields refreshed now (§9.1); to one JTAC or one AO (§9.2).
+        const brief = this.#brief.forSending();
+        if (!brief) return failed('notPossible', 'Join a flight first');
+        return (await this.#casSend(joined, 'cas.checkIn', { brief }, command.args.target)).outcome;
+      }
+      case 'cas.sitUpdate': {
+        const { aoId, flightId, update } = command.args;
+        const to: Address =
+          flightId === null ? { scope: 'ao', id: aoId } : { scope: 'flight', id: flightId };
+        const sent = await this.#casSend(joined, 'cas.sitUpdate', { aoId, update }, to);
+        // The relay doesn't echo it to the sender: his own note.
+        if (sent.outcome.ok) {
+          this.#cas.note({
+            id: sent.id,
+            aoId,
+            flightId,
+            from: joined.pid,
+            update,
+            receivedAt: this.#now(),
+            copied: false,
+          });
+        }
+        return sent.outcome;
+      }
+      case 'cas.sitCopy': {
+        const note = this.#store.get('cas').sitUpdates.find((n) => n.id === command.args.id);
+        if (!note) return failed('notPossible', 'No such situation update');
+        const sent = await this.#casSend(
+          joined,
+          'cas.sitCopy',
+          {},
+          { scope: 'pid', id: note.from },
+          note.id,
+        );
+        if (sent.outcome.ok) this.#cas.copied(note.id);
+        return sent.outcome;
+      }
+      case 'fuel.call': {
+        // Never automatic (§6.5): the pilot pressed it; the host adds his internal fuel.
+        const internalKg = this.#fuel.internalKg();
+        if (internalKg === null) {
+          return failed('notPossible', 'No fuel reading yet – enter it on Ownship → Aircraft');
+        }
+        const flightId = this.#store.get('flight').own?.flightId;
+        const to: Address = flightId ? { scope: 'flight', id: flightId } : { scope: 'relay' };
+        const sent = await this.#casSend(
+          joined,
+          'fuel.call',
+          { call: command.args.call, internalKg },
+          to,
+        );
+        if (sent.outcome.ok) this.#fuel.sent(command.args.call);
+        return sent.outcome;
+      }
+      case 'log.request': {
+        const result = await this.#logCopy.fetch(command.args);
+        return typeof result === 'string' ? failed('relayError', result) : { ok: true };
+      }
+      default:
+        // jtac.*, ao.update, cm.*, cas.checkOut, cas.release, cas.hold.*, fm.* – unchanged.
+        return (await this.#casSend(joined, command.cmd, command.args, { scope: 'relay' })).outcome;
+    }
+  }
+
+  /** A CAS message with `ack: true`; its ticks start in `cas.deliveries` (§1.2). */
+  #casSend(
+    joined: Joined,
+    type: string,
+    body: unknown,
+    to: Address,
+    re: string | null = null,
+  ): Promise<{ outcome: CommandOutcome; reply: Message | null; id: string }> {
+    const id = ulid(this.#now());
+    this.#cas.sent(id);
+    return this.#send(joined, type, body, to, { ack: true, re, id });
+  }
+
+  /** One `log.request` page for the CAS log copy. */
+  async #logRequest(
+    body: Extract<Message, { type: 'log.request' }>['body'],
+  ): Promise<Extract<Message, { type: 'log.entries' }>['body'] | string> {
+    const joined = this.#joined;
+    if (!joined) return 'Not in a session';
+    const { outcome, reply } = await this.#send(joined, 'log.request', body, { scope: 'relay' });
+    if (!outcome.ok) return outcome.error.text;
+    return reply?.type === 'log.entries' ? reply.body : 'No log entries in the answer';
+  }
+
+  #me(): Me | null {
+    const joined = this.#joined;
+    return joined ? { pid: joined.pid, role: joined.role } : null;
+  }
+
+  /** Whose log this player may keep (§12.3): a JTAC his AO, a pilot his flight. */
+  #logScope(): LogScope | null {
+    const me = this.#me();
+    if (!me) return null;
+    if (me.role === 'jtac') {
+      const ao = this.#cas.myAo(me);
+      return ao ? { scope: 'ao', id: ao.aoId } : null;
+    }
+    const flightId = this.#store.get('flight').own?.flightId;
+    return flightId ? { scope: 'flight', id: flightId } : null;
+  }
+
+  /** `Enfield 1-2` for a flight mate, a JTAC's callsign, else the nick. */
+  #callsign(pid: string): string {
+    const own = this.#store.get('flight').own;
+    const member = own?.members.find((m) => m.pid === pid);
+    if (own && member) return `${own.display}-${String(member.pos)}`;
+    for (const ao of this.#store.get('cas').aos) {
+      const jtac = ao.jtacs.find((j) => j.pid === pid);
+      if (jtac) return jtac.callsign;
+    }
+    return this.#store.get('session').participants.find((p) => p.pid === pid)?.nick ?? pid;
   }
 
   // -------------------------------------------------------------------------
@@ -378,7 +568,7 @@ export class RelayClient {
     this.#setSession({ relay: { address, name: hello.body.relay, own: local !== null } });
 
     const aircraft = this.#store.get('ownship').aircraft;
-    const role = aircraft && JTAC_SLOTS.has(aircraft.type) ? 'jtac' : join.role;
+    const role = roleFor(aircraft, join.role);
     const answer = await this.#exchange(link, 'session.join', {
       code: join.code,
       coalition: join.coalition,
@@ -528,8 +718,13 @@ export class RelayClient {
         clearTimeout(pending.timer);
         pending.resolve(
           message.type === 'error' ? failed('relayError', message.body.text) : { ok: true },
+          message,
         );
       }
+    }
+    // Level 2 (§1.2): this app got it – unless it is the echo of our own command.
+    if (message.ack && message.from !== this.#joined.pid && !this.#ownAck.has(message.re ?? '')) {
+      this.#receipts.push(message.id);
     }
     this.#apply(message);
   }
@@ -551,6 +746,8 @@ export class RelayClient {
           flight: { own: null, open: [], status: [] },
           traffic: { aircraft: [] },
         });
+        this.#cas.clear();
+        this.#logCopy.reset();
         return;
       }
       case 'session.state': {
@@ -568,6 +765,8 @@ export class RelayClient {
           },
           traffic: { aircraft: [] },
         });
+        this.#cas.snapshot(body);
+        this.#logCopy.changed(() => this.#logScope());
         return;
       }
       case 'session.presence': {
@@ -663,8 +862,20 @@ export class RelayClient {
         });
         return;
       }
-      default:
+      case 'relay.receipt': {
+        if (message.re !== null) this.#cas.receipt(message.re);
         return;
+      }
+      case 'msg.received': {
+        if (message.re !== null) this.#cas.received(message.re, message.from);
+        return;
+      }
+      default: {
+        const me = this.#me();
+        if (me && this.#cas.apply(message, me, (pid) => this.#callsign(pid))) {
+          this.#logCopy.changed(() => this.#logScope());
+        }
+      }
     }
   }
 
@@ -691,31 +902,79 @@ export class RelayClient {
   // -------------------------------------------------------------------------
   // Outbound
 
-  #frame(type: string, body: unknown, joined: Joined, to: Address): string {
+  /**
+   * One envelope. Every message carries the mission time `mt` while a DCS
+   * mission runs (§1.4) – the relay's clock for the CAS log and Type 3 windows.
+   */
+  #frame(
+    type: string,
+    body: unknown,
+    joined: Joined,
+    to: Address,
+    extra: { ack?: boolean; re?: string | null; id?: string } = {},
+  ): string {
+    const mt = this.#missionTime();
     return JSON.stringify({
       v: PROTOCOL_VERSION,
-      id: ulid(this.#now()),
+      id: extra.id ?? ulid(this.#now()),
       type,
       from: joined.pid,
       session: joined.coalition,
       to,
       ts: this.#now(),
-      ack: false,
-      re: null,
+      ack: extra.ack ?? false,
+      re: extra.re ?? null,
+      ...(mt === null ? {} : { mt }),
       body,
     });
   }
 
+  /** The DCS mission clock now (§0), or `null` without a running mission. */
+  #missionTime(): number | null {
+    const mission = this.#store.get('mission');
+    const clock = mission.clock;
+    if (!mission.running || clock === null) return null;
+    const elapsed = clock.paused ? 0 : Math.max(0, this.#now() - clock.sampledAt) / 1000;
+    return Math.round((clock.mtimeSec + elapsed) * 10) / 10;
+  }
+
   /** Sends a relay command and resolves with its answer (`re`), or `relayTimeout`. */
-  #request(joined: Joined, type: string, body: unknown): Promise<CommandOutcome> {
-    const text = this.#frame(type, body, joined, { scope: 'relay' });
-    const id = (JSON.parse(text) as { id: string }).id;
+  async #request(joined: Joined, type: string, body: unknown): Promise<CommandOutcome> {
+    return (await this.#send(joined, type, body, { scope: 'relay' })).outcome;
+  }
+
+  /**
+   * Sends a message and waits for the first answer that names it (`re`): the
+   * relay's domain reply, its receipt for an `ack` message, or an error.
+   */
+  #send(
+    joined: Joined,
+    type: string,
+    body: unknown,
+    to: Address,
+    extra: { ack?: boolean; re?: string | null; id?: string } = {},
+  ): Promise<{ outcome: CommandOutcome; reply: Message | null; id: string }> {
+    const id = extra.id ?? ulid(this.#now());
+    const text = this.#frame(type, body, joined, to, { ...extra, id });
+    if (extra.ack) {
+      this.#ownAck.add(id);
+      // Kept about as long as the relay keeps its side (§1.2).
+      if (this.#ownAck.size > 500) {
+        const oldest = this.#ownAck.values().next().value;
+        if (oldest !== undefined) this.#ownAck.delete(oldest);
+      }
+    }
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
-        resolve(failed('relayTimeout', 'No answer from the relay'));
+        resolve({ outcome: failed('relayTimeout', 'No answer from the relay'), reply: null, id });
       }, UI_TIMING.relayTimeoutSec * 1000);
-      this.#pending.set(id, { resolve, timer });
+      this.#pending.set(id, {
+        resolve: (outcome, reply) => {
+          resolve({ outcome, reply, id });
+        },
+        timer,
+      });
       joined.link.send(text);
     });
   }
@@ -723,7 +982,7 @@ export class RelayClient {
   #failPending(code: 'notConnected' | 'relayError', text: string): void {
     for (const [id, pending] of this.#pending) {
       clearTimeout(pending.timer);
-      pending.resolve(failed(code, text));
+      pending.resolve(failed(code, text), null);
       this.#pending.delete(id);
     }
   }
@@ -758,6 +1017,9 @@ export class RelayClient {
       flight: { own: null, open: [], status: [] },
       traffic: { aircraft: [] },
     });
+    this.#cas.clear();
+    this.#logCopy.reset();
+    this.#receipts = [];
     this.#setRelayState('notConnected');
   }
 }

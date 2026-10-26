@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "dev:demo": "vite",
+    "dev:demo:jtac": "vite",
     "build": "vite build",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.node.json"
   },

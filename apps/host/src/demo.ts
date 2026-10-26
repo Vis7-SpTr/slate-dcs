@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Demo data for layout tests before the Lua bridge exists (P1.2): a running
-// mission on Caucasus and an F/A-18C near Batumi. Started with `--demo`.
-// Never used in a real session.
+// mission on Caucasus and an F/A-18C near Batumi. Started with `--demo`;
+// from P2.5 with a CAS picture too – a pilot's, or with `--demo=jtac` a
+// JTAC's (demo-cas.ts). Never used in a real session.
 
 import { BRIDGE_VERSION } from '@slate-dcs/shared';
 
+import { applyDemoCas } from './demo-cas.js';
+import type { DemoKind } from './demo-cas.js';
 import type { StateStore } from './state/store.js';
 
 /** 08:30:00 local on the mission's start date. */
 const DEMO_MTIME_SEC = 8 * 3600 + 30 * 60;
 
-export function applyDemoState(store: StateStore, now: number = Date.now()): void {
+export function applyDemoState(
+  store: StateStore,
+  now: number = Date.now(),
+  kind: DemoKind = 'pilot',
+): void {
   store.update({
     host: {
       ...store.get('host'),
@@ -93,6 +100,7 @@ export function applyDemoState(store: StateStore, now: number = Date.now()): voi
       },
     },
   });
+  applyDemoCas(store, kind, now);
 }
 
 /**

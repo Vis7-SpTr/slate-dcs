@@ -11,7 +11,9 @@
     "start": "tsx src/main.ts",
     "start:demo": "tsx src/main.ts --demo",
     "typecheck": "tsc -p tsconfig.json",
-    "relay": "tsx src/relay-main.ts"
+    "relay": "tsx src/relay-main.ts",
+    "start:demo:jtac": "tsx src/main.ts --demo=jtac",
+    "dev:demo:jtac": "tsx watch src/main.ts --demo=jtac"
   },
   "dependencies": {
     "@fastify/static": "^10.1.6",

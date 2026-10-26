@@ -5,6 +5,7 @@
 
 import type { Altitude, KeyholeAxis, LatLon, PointRef } from './cas-common.js';
 import { KEYHOLE_AXIS_DEG } from './cas-common.js';
+import { gridConvergenceDeg, gridScale } from './maps.js';
 
 const RAD = Math.PI / 180;
 /** Mean earth radius, metres – enough for distances of a few dozen NM. */
@@ -39,9 +40,9 @@ export function destination(from: LatLon, bearingDeg: number, distanceM: number)
 
 /**
  * A keyhole point from ECHO (§8.5). `gridToMeridianDeg` turns the axis's grid
- * direction into a meridian bearing (DCS map grid north vs. true north at
- * ECHO); 0 until the per-map value is built (P2.5) – about 0.7 NM off at 5 NM
- * on Caucasus, fine for the hold overlap check, not for line 1.
+ * direction into a meridian bearing: γ at ECHO (`gridConvergenceDeg`), so
+ * "ALPHA 5" lies 5 NM grid-north, where the F10 ruler measures it. With 0
+ * (unknown map) a point is off by γ – on Caucasus about 0.6 NM at 5 NM.
  */
 export function keyholePosition(
   echo: LatLon,
@@ -129,4 +130,21 @@ export function holdsConflict(a: HoldShapeInput, b: HoldShapeInput, lookup: Poin
   const areaB = holdArea(b, lookup);
   if (areaA === null || areaB === null) return false;
   return distanceM(areaA.center, areaB.center) < areaA.radiusM + areaB.radiusM;
+}
+
+/**
+ * A keyhole point on a map (§8.5): along grid north from the map's central
+ * meridian, and the distance in DCS's grid NM, as the F10 ruler measures it.
+ * Unknown map: true north and ground NM.
+ */
+export function keyholePoint(
+  echo: LatLon,
+  axis: KeyholeAxis,
+  distanceNm: number | null | undefined,
+  theatre: string | null,
+): LatLon {
+  const scale = gridScale(theatre, echo) ?? 1;
+  const groundNm =
+    distanceNm === null || distanceNm === undefined ? distanceNm : distanceNm / scale;
+  return keyholePosition(echo, axis, groundNm, gridConvergenceDeg(theatre, echo) ?? 0);
 }

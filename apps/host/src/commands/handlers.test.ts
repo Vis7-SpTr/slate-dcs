@@ -135,11 +135,11 @@ describe('relay commands before the relay exists', () => {
   });
 });
 
-describe('P2 commands before P2.5', () => {
-  it.each(CAS_COMMANDS)('%s answers notPossible and changes nothing', async (name) => {
+describe('P2 commands without a relay client (demo mode)', () => {
+  it.each(CAS_COMMANDS)('%s answers notConnected and changes nothing', async (name) => {
     const { store } = setup();
     const handler = createHandlers(store)[name] as (args: unknown) => unknown;
-    expect(await handler({})).toMatchObject({ ok: false, error: { code: 'notPossible' } });
+    expect(await handler({})).toMatchObject({ ok: false, error: { code: 'notConnected' } });
     expect(store.seq).toBe(0);
   });
 });
