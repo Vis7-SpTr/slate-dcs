@@ -69,7 +69,6 @@ export const en = {
   'soon.map.text': 'The moving map comes in P3. Map controls appear here with it.',
   'soon.mapControls': 'Map controls come with the moving map (P3).',
   'soon.checkIn.title': 'Check-in',
-  'soon.checkIn.text': 'The pilot’s check-in to a JTAC or AO comes with P2.7.',
   'soon.cas.title': 'CAS',
   'soon.cas.text': 'Flights, fire missions and the CAS log come in P2.',
   'soon.checklist.title': 'Checklists',

@@ -3,7 +3,7 @@
   Ownship → Aircraft (ui-design.md §8): own aircraft, position block, fuel in
   the cockpit's unit, armament (simple totals or the station diagram, see
   armament/), each value with its source. Shows "—" while DCS has no data.
-  Joker/bingo marks come with their package.
+  JOKER/BINGO levels, marks and send buttons for pilots (P2.7).
 -->
 <script lang="ts">
   import { fuelUnit, unitDisplayName } from '@slate-dcs/shared';
@@ -11,6 +11,7 @@
 
   import Card from '../../components/Card.svelte';
   import ArmamentCard from './armament/ArmamentCard.svelte';
+  import FuelCallsCard from './FuelCallsCard.svelte';
   import Row from '../../components/Row.svelte';
   import SourceTag from '../../components/SourceTag.svelte';
   import { clock } from '../../lib/clock.svelte.js';
@@ -108,6 +109,10 @@
       </Row>
       {#if fuelUnknown}<p class="hint">{t('aircraft.fuelUnknown')}</p>{/if}
     </Card>
+
+    {#if aircraft && host.view.slices?.session.role !== 'jtac'}
+      <FuelCallsCard />
+    {/if}
 
     <div class="wide">
       <ArmamentCard

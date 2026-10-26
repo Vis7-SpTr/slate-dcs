@@ -14,6 +14,7 @@
   import MapPage from '../modules/map/MapPage.svelte';
   import MorePage from '../modules/more/MorePage.svelte';
   import OwnshipPage from '../modules/ownship/OwnshipPage.svelte';
+  import AlertBar from './AlertBar.svelte';
   import MainTabs from './MainTabs.svelte';
   import StatusStrip from './StatusStrip.svelte';
   import SubTabRow from './SubTabRow.svelte';
@@ -34,6 +35,7 @@
 
 <div class="shell">
   <div class="strip"><StatusStrip /></div>
+  <div class="alerts"><AlertBar /></div>
 
   {#if title !== null}
     <h1 class="title">{title}</h1>
@@ -61,11 +63,11 @@
   .shell {
     height: 100dvh;
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
     /* One column that never grows past the window: a wide row (e.g. 7 sub-tabs
        at phone width) scrolls inside itself instead. */
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'strip' 'title' 'content' 'subtabs' 'tabs';
+    grid-template-areas: 'strip' 'alerts' 'title' 'content' 'subtabs' 'tabs';
     container: shell / inline-size;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
       env(safe-area-inset-left);
@@ -73,6 +75,10 @@
 
   .strip {
     grid-area: strip;
+  }
+
+  .alerts {
+    grid-area: alerts;
   }
 
   .title {

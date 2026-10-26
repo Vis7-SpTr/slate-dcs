@@ -9,10 +9,13 @@ import {
   clearConflicts,
   emptyContent,
   laneLaser,
+  abortNotice,
   laneSlots,
   missionRights,
   missionSlots,
   pendingAcks,
+  pendingRevs,
+  pilotClearance,
   spiOffset,
   stepReady,
 } from './missions.js';
@@ -247,5 +250,74 @@ describe('correlation and changes', () => {
 
   it('a new mission’s content is valid as it is', () => {
     expect(MissionContent.safeParse(emptyContent()).success).toBe(true);
+  });
+});
+
+describe('the pilot’s own lane (P2.7)', () => {
+  const run = (kind: 'hot' | 'dry' | 'window', abort: Lane['runs'][number]['abort'] = null) => ({
+    run: 1,
+    clearance: { kind, ts: 1, mtime: 100, by: JTAC },
+    abort,
+  });
+
+  it('the clearance slot follows his own lane only', () => {
+    const m = (lanes: Lane[], state: FireMission['state'] = 'readbackCorrect') =>
+      mission({ state, lanes });
+    expect(pilotClearance(m([lane(LEAD, 'open')], 'briefed'), LEAD)).toBe('briefed');
+    expect(pilotClearance(m([lane(LEAD, 'correlated')]), LEAD)).toBe('correlated');
+    expect(pilotClearance(m([lane(LEAD, 'cleared', { runs: [run('hot')] })]), LEAD)).toBe('hot');
+    expect(pilotClearance(m([lane(LEAD, 'cleared', { runs: [run('window')] })]), LEAD)).toBe(
+      'window',
+    );
+    // Another aircraft's clearance is never his.
+    expect(pilotClearance(m([lane(WING, 'cleared', { runs: [run('hot')] })]), LEAD)).toBe(
+      'notAssigned',
+    );
+    expect(pilotClearance(m([lane(LEAD, 'cleared')], 'complete'), LEAD)).toBe('closed');
+  });
+
+  it('an abort stands until he is cleared again; a read-back change names the line', () => {
+    const abort = {
+      ts: 5,
+      mtime: 101,
+      by: JTAC_2,
+      channel: 'voice' as const,
+      reason: 'Friendlies',
+    };
+    const aborted = mission({ lanes: [lane(LEAD, 'correlated', { runs: [run('hot', abort)] })] });
+    expect(abortNotice(aborted, LEAD)).toMatchObject({
+      reason: 'Friendlies',
+      channel: 'voice',
+      by: JTAC_2,
+    });
+    expect(abortNotice(aborted, WING)).toBeNull();
+    const again = mission({
+      lanes: [lane(LEAD, 'cleared', { runs: [run('hot', abort), { ...run('hot'), run: 2 }] })],
+    });
+    expect(abortNotice(again, LEAD)).toBeNull();
+    const rb = mission({
+      state: 'briefed',
+      changes: [
+        { rev: 4, fields: ['nineLine.location', 'nineLine.locationText'], old: {}, ackedBy: [] },
+      ],
+      lanes: [
+        lane(LEAD, 'open', {
+          runs: [run('hot', { ...abort, by: 'relay', channel: 'app', reason: 'rbChange' })],
+        }),
+      ],
+    });
+    expect(abortNotice(rb, LEAD)?.reason).toBe('LINE 6 CHANGED');
+  });
+
+  it('changes he still has to ACK', () => {
+    const m = mission({
+      changes: [
+        { rev: 2, fields: ['nineLine.egress'], old: {}, ackedBy: [LEAD] },
+        { rev: 3, fields: ['remarks.text'], old: {}, ackedBy: [] },
+      ],
+    });
+    expect(pendingRevs(m, LEAD)).toEqual([3]);
+    expect(pendingRevs(m, WING)).toEqual([2, 3]);
+    expect(pendingRevs(m, 'p_000000')).toEqual([]);
   });
 });

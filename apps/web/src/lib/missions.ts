@@ -367,3 +367,86 @@ export function fieldKey(path: string): MessageKey {
   const key = `field.${path}`;
   return key in en ? (key as MessageKey) : 'field.nineLine.description';
 }
+
+// ---------------------------------------------------------------------------
+// The pilot's side (P2.7): his own lane only (§10.1).
+
+/** What the pilot's clearance slot says (ui-design.md §7). Only `hot`, `dry`, `window` are cleared. */
+export type PilotClearance =
+  | 'notAssigned'
+  | 'briefed'
+  | 'open'
+  | 'correlated'
+  | 'hot'
+  | 'dry'
+  | 'window'
+  | 'waitingBda'
+  | 'bda'
+  | 'closed';
+
+/** The pilot's own lane, or `null` (an aircraft assignment without him). */
+export function ownLane(m: FireMission, pid: string | null): Lane | null {
+  return m.lanes.find((l) => l.pid === pid) ?? null;
+}
+
+/** The pilot's clearance state for one mission (dual clearance: the app's half, §10.6). */
+export function pilotClearance(m: FireMission, pid: string | null): PilotClearance {
+  if (CLOSED_STATES.has(m.state)) return 'closed';
+  const lane = ownLane(m, pid);
+  if (!lane) return 'notAssigned';
+  if (m.state !== 'readbackCorrect') return m.state === 'briefed' ? 'briefed' : 'notAssigned';
+  if (lane.state === 'cleared') return lane.runs.at(-1)?.clearance.kind ?? 'hot';
+  return lane.state;
+}
+
+export interface AbortNotice {
+  /** Stays the same for one abort, so a screen can remember it was dismissed. */
+  key: string;
+  /** `LINE 6 CHANGED`, `REPLAN`, or the reason given. */
+  reason: string;
+  channel: 'app' | 'voice';
+  /** Who aborted: a pid, or `relay` for a change or a replan. */
+  by: string;
+}
+
+const READBACK_NAMES: Record<string, string> = {
+  'nineLine.elevationM': 'LINE 4',
+  'nineLine.location': 'LINE 6',
+  'nineLine.locationText': 'LINE 6',
+  'remarks.restrictions': 'RESTRICTIONS',
+};
+
+/**
+ * The abort on the pilot's own lane, while it stands: the lane's last run was
+ * aborted and it hasn't been cleared again. A read-back change reads
+ * "LINE 6 CHANGED" (§10.5).
+ */
+export function abortNotice(m: FireMission, pid: string | null): AbortNotice | null {
+  if (CLOSED_STATES.has(m.state)) return null;
+  const lane = ownLane(m, pid);
+  const run = lane?.runs.at(-1);
+  if (!lane || !run?.abort || lane.state === 'cleared') return null;
+  const { abort } = run;
+  let reason = abort.reason;
+  if (reason === 'rbChange') {
+    const fields = [...m.changes]
+      .reverse()
+      .find((c) => c.fields.some((f) => f in READBACK_NAMES))?.fields;
+    const names = [...new Set((fields ?? []).map((f) => READBACK_NAMES[f]).filter((x) => x))];
+    reason = `${names.length > 0 ? names.join(' + ') : 'READ-BACK ITEM'} CHANGED`;
+  } else if (reason === 'replan') {
+    reason = 'REPLAN';
+  }
+  return {
+    key: `${m.missionId}:${String(run.run)}:${String(abort.ts)}`,
+    reason,
+    channel: abort.channel,
+    by: abort.by,
+  };
+}
+
+/** Changes the pilot hasn't acknowledged yet, oldest first (§10.5). */
+export function pendingRevs(m: FireMission, pid: string | null): number[] {
+  if (pid === null || !ownLane(m, pid)) return [];
+  return m.changes.filter((c) => !c.ackedBy.includes(pid)).map((c) => c.rev);
+}

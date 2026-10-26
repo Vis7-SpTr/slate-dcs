@@ -7,6 +7,7 @@
   import { host } from '../../lib/host.svelte.js';
   import AircraftView from './AircraftView.svelte';
   import FlightView from './FlightView.svelte';
+  import CheckInView from './CheckInView.svelte';
   import StationView from './StationView.svelte';
 
   const { sub }: { sub: SubTabId } = $props();
@@ -22,5 +23,5 @@
 {:else if session.role === 'jtac'}
   <StationView />
 {:else}
-  <EmptyState title={t('soon.checkIn.title')} text={t('soon.checkIn.text')} />
+  <CheckInView />
 {/if}

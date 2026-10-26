@@ -15,6 +15,7 @@
     altText,
     casWho,
     flightName,
+    holdShapeText,
     mtimeText,
     pointText,
     positionText,
@@ -34,14 +35,6 @@
 
   let form: { hold: Hold | null } | null = $state(null);
   let command: string | null = $state(null);
-
-  function shapeText(h: Hold): string {
-    const nm = (m: number | null) => `${String(Math.round(((m ?? 0) / 1852) * 10) / 10)} NM`;
-    const turn = t(`hold.turns.${h.turns}`);
-    return h.shape === 'orbit'
-      ? `${t('hold.orbit')} ${nm(h.radiusM)} · ${turn}`
-      : `${t('hold.racetrack')} ${nm(h.legM)} · ${t('hold.inboundShort', { deg: String(h.inboundDeg ?? 0).padStart(3, '0') })} · ${turn}`;
-  }
 </script>
 
 {#if !slices || !who}
@@ -77,7 +70,7 @@
           {#if p.at}<span class="mono dim">{positionText(p.at, who.style)[0]}</span>{/if}
         </div>
         <div class="line dim">
-          <span>{shapeText(h)}</span>
+          <span>{holdShapeText(h)}</span>
           {#if h.from !== null || h.until !== null}
             <span class="mono">
               {h.from === null ? '' : mtimeText(slices, h.from)} – {h.until === null

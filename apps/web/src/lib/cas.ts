@@ -12,12 +12,15 @@ import {
   keyholePointName,
   mapUtcOffsetHours,
 } from '@slate-dcs/shared';
+import { t } from './i18n/index.js';
+
 import type {
   Ao,
   CheckIn,
   CoordStyle,
   Delivery,
   FireMission,
+  Hold,
   LatLon,
   MapEntry,
   PointRef,
@@ -78,6 +81,8 @@ export function flightName(slices: Slices, flightId: string | null | undefined):
   if (checkIn) return checkIn.brief.callsign;
   const own = slices.flight.own;
   if (own && own.flightId === flightId) return own.display;
+  const listed = slices.flight.open.find((f) => f.flightId === flightId);
+  if (listed) return listed.display;
   return flightId ?? '—';
 }
 
@@ -161,6 +166,12 @@ export function deliveryOf(
     (d) => types.includes(d.type) && d.ref === ref && (pid === null || d.pid === pid),
   );
   return list.at(-1) ?? null;
+}
+
+/** The newest delivery of any of `types`, whatever it is about (e.g. the last check-in sent). */
+export function latestDelivery(slices: Slices, types: string | readonly string[]): Delivery | null {
+  const list = typeof types === 'string' ? [types] : types;
+  return slices.cas.deliveries.filter((d) => list.includes(d.type)).at(-1) ?? null;
 }
 
 /**
@@ -295,4 +306,13 @@ export function areaText(ao: Ao): string {
 export function altText(a: { m: number; ref: 'sfc' | 'agl' | 'msl' }): string {
   if (a.ref === 'sfc') return 'SFC';
   return `${String(Math.round(a.m / 0.3048 / 100) * 100)} ft ${a.ref.toUpperCase()}`;
+}
+
+/** A hold's shape: `Orbit 3 NM · Left turns`, `Racetrack 5 NM · inbound 270° · Right turns`. */
+export function holdShapeText(h: Hold): string {
+  const nm = (m: number | null) => `${String(Math.round(((m ?? 0) / NM) * 10) / 10)} NM`;
+  const turn = t(`hold.turns.${h.turns}`);
+  return h.shape === 'orbit'
+    ? `${t('hold.orbit')} ${nm(h.radiusM)} · ${turn}`
+    : `${t('hold.racetrack')} ${nm(h.legM)} · ${t('hold.inboundShort', { deg: String(h.inboundDeg ?? 0).padStart(3, '0') })} · ${turn}`;
 }
