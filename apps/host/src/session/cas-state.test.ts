@@ -177,7 +177,9 @@ describe('relay messages', () => {
     cas.received(ID1, 'p_2');
     cas.received(ID1, 'p_2');
     cas.received(ID2, 'p_2');
-    expect(store.get('cas').deliveries).toEqual([{ id: ID1, relay: true, receivedBy: ['p_2'] }]);
+    expect(store.get('cas').deliveries).toEqual([
+      { id: ID1, type: '', ref: null, pid: null, at: 1000, relay: true, receivedBy: ['p_2'] },
+    ]);
   });
 
   it('own fuel calls are not "received"', () => {

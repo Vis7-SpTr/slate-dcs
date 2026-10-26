@@ -261,9 +261,16 @@ export class CasState {
   // Confirmations (§1.2)
 
   /** A CAS message this host sent with `ack: true`: its ticks start empty. */
-  sent(id: string): void {
+  sent(
+    id: string,
+    about: { type: string; ref: string | null; pid: string | null } = {
+      type: '',
+      ref: null,
+      pid: null,
+    },
+  ): void {
     const cas = this.cas;
-    const delivery = { id, relay: false, receivedBy: [] };
+    const delivery = { id, ...about, at: this.#now(), relay: false, receivedBy: [] };
     this.#set({ ...cas, deliveries: [...cas.deliveries, delivery].slice(-KEEP) });
   }
 

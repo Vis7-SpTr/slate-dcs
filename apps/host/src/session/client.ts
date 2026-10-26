@@ -85,6 +85,27 @@ export function roleFor(aircraft: AircraftInfo | null, joined: string): string {
   return JTAC_SLOTS.has(aircraft.type) ? 'jtac' : 'pilot';
 }
 
+/** What a CAS message is about – for the ticks on the screen (P2.6): its mission, hold or flight, and lane. */
+function about(body: unknown, to: Address): { ref: string | null; pid: string | null } {
+  const b = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
+  const text = (key: string) => {
+    const value = b[key];
+    return typeof value === 'string' ? value : null;
+  };
+  const target = to.scope === 'flight' || to.scope === 'ao' || to.scope === 'pid' ? to.id : null;
+  return {
+    // A message to one flight is about that flight, even when its body names the AO.
+    ref:
+      text('missionId') ??
+      text('holdId') ??
+      text('flightId') ??
+      (to.scope === 'flight' ? to.id : null) ??
+      text('aoId') ??
+      target,
+    pid: text('pid'),
+  };
+}
+
 /** `msg.received` sent per tick at most – a long replay mustn't hit the rate limit (§1.3). */
 const RECEIPTS_PER_TICK = 5;
 
@@ -417,7 +438,7 @@ export class RelayClient {
     re: string | null = null,
   ): Promise<{ outcome: CommandOutcome; reply: Message | null; id: string }> {
     const id = ulid(this.#now());
-    this.#cas.sent(id);
+    this.#cas.sent(id, { type, ...about(body, to) });
     return this.#send(joined, type, body, to, { ack: true, re, id });
   }
 

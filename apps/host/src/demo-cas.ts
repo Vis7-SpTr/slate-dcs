@@ -31,6 +31,7 @@ const JTAC_2 = 'p_4d2e10';
 const LEAD = 'p_7f3a9c';
 const WING = 'p_2b81de';
 const COLT_1 = 'p_5e7d20';
+const COLT_2 = 'p_6f1a33';
 const ENFIELD = 'f_3k9q2m';
 const COLT = 'f_8h2w4n';
 const AO_ID = 'a_4m2k9q';
@@ -129,12 +130,18 @@ const MAP_ENTRIES: MapEntry[] = [
   ),
 ];
 
-function brief(callsign: string, lead: string, wing: string, code: number): CheckInBrief {
+function brief(
+  callsign: string,
+  lead: string,
+  wing: string,
+  code: number,
+  type = 'FA-18C_hornet',
+): CheckInBrief {
   return {
     callsign,
     aircraft: [
-      { pid: lead, type: 'FA-18C_hornet' },
-      { pid: wing, type: 'FA-18C_hornet' },
+      { pid: lead, type },
+      { pid: wing, type },
     ],
     position: { lat: 41.6123, lon: 41.6391, altMsl: 4572 },
     ordnance: [
@@ -389,7 +396,7 @@ function log(now: number, jtac: boolean): LogEntry[] {
 export function demoCas(kind: DemoKind, now: number) {
   const jtac = kind === 'jtac';
   const enfield = brief('Enfield 1', LEAD, WING, 1688);
-  const colt = brief('Colt 1', COLT_1, 'p_6f1a33', 1511);
+  const colt = brief('Colt 1', COLT_1, COLT_2, 1511, 'F-16C_50');
   const participants: SessionSlice['participants'] = [
     {
       pid: JTAC,
@@ -433,8 +440,33 @@ export function demoCas(kind: DemoKind, now: number) {
     error: null,
     announced: null,
   };
+  // A JTAC gets the full status of checked-in aircraft (§6.4): fuel and age on the cards.
+  const status = (pid: string, lat: number, internalKg: number, ageS: number) => ({
+    pid,
+    status: {
+      pos: { lat, lon: 41.62, altMsl: 4900, altAgl: 4700 },
+      hdg: 270,
+      hdgMag: 264,
+      gs: 190,
+      ias: 160,
+      fuel: { internalKg, externalKg: 0, source: 'export' as const },
+      armament: null,
+      avail: { pos: true, fuel: true, payload: false },
+      reason: 'heartbeat' as const,
+    },
+    receivedAt: now - ageS * 1000,
+  });
   const flight: FlightSlice = jtac
-    ? { own: null, open: [], status: [] }
+    ? {
+        own: null,
+        open: [],
+        status: [
+          status(LEAD, 42.3, 2900, 4),
+          status(WING, 42.31, 1814, 7),
+          status(COLT_1, 42.36, 2100, 3),
+          status(COLT_2, 42.37, 2050, 12),
+        ],
+      }
     : {
         own: {
           flightId: ENFIELD,
@@ -482,7 +514,19 @@ export function demoCas(kind: DemoKind, now: number) {
       : [checkIn(ENFIELD, enfield, now - 22 * 60_000, JTAC)],
     sitUpdates: [{ ...note, copied: true }],
     briefDraft: jtac ? null : { brief: enfield, edited: [] },
-    deliveries: jtac ? [{ id: '01JABD2K7Q0M3N4P5R6S7T8V9X', relay: true, receivedBy: [LEAD] }] : [],
+    deliveries: jtac
+      ? [
+          {
+            id: '01JABD2K7Q0M3N4P5R6S7T8V9X',
+            type: 'fm.clear',
+            ref: 'm_8d21f0',
+            pid: LEAD,
+            at: now - 40_000,
+            relay: true,
+            receivedBy: [LEAD],
+          },
+        ]
+      : [],
     holdWilcos: [{ holdId: HOLD.holdId, pid: LEAD, at: now - 19 * 60_000 }],
   };
   const missions = jtac ? [mission(now), COLT_MISSION] : [pilotView(mission(now), LEAD)];

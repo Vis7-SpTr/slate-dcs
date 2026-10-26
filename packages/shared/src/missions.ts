@@ -382,10 +382,14 @@ export const FmWindow = defineMessage('fm.window', ById.extend({ window: WindowD
 export const FmWindowRevoke = defineMessage('fm.windowRevoke', ById);
 /** `fm.waitingBda`: the attack is over (OFF on voice); the clearance ends. */
 export const FmWaitingBda = defineMessage('fm.waitingBda', ByLane);
-/** `fm.abort`: any JTAC in the AO, or the pilot for his own lane. A voice abort is clicked in afterwards. */
+/**
+ * `fm.abort`: any JTAC in the AO, or the pilot for his own lane. A voice abort
+ * is clicked in afterwards. The reason is never empty – it becomes the lane's
+ * `Abort.reason` (P2.6b).
+ */
 export const FmAbort = defineMessage(
   'fm.abort',
-  ByLane.extend({ channel: z.enum(['app', 'voice']), reason: Text(100) }),
+  ByLane.extend({ channel: z.enum(['app', 'voice']), reason: AbortReason }),
 );
 /** `fm.voiceOnly`: the SLATE link was lost mid-mission – shown on both sides and logged. */
 export const FmVoiceOnly = defineMessage('fm.voiceOnly', ById.extend({ on: z.boolean() }));

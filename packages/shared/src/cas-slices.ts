@@ -23,6 +23,14 @@ export type BriefField = z.infer<typeof BriefField>;
 export const Delivery = z.object({
   /** The command's message ID. */
   id: MessageId,
+  /** What was sent and what it is about, so a screen shows the ticks where it belongs (P2.6). */
+  type: z.string().max(40).default(''),
+  /** The mission, hold or flight it is about; `null` if none. */
+  ref: z.string().max(64).nullable().default(null),
+  /** The aircraft (lane) it is about. */
+  pid: Pid.nullable().default(null),
+  /** When it was sent (host time). */
+  at: EpochMs.default(0),
   /** Level 1: the relay accepted it. */
   relay: z.boolean(),
   /** Level 2: these recipients' apps got it. */

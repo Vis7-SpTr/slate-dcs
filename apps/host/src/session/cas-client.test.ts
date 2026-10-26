@@ -296,7 +296,10 @@ describe('CAS through the host (P2.5)', () => {
 
     // --- Ticks (§1.2): the clearance reached the lead's app ---------------------
     await pump(hosts);
-    const clearId = jtac.store.get('cas').deliveries.at(-1)?.id ?? '';
+    // The clearance's ticks name its mission and lane, so the lane can show them.
+    const clear = jtac.store.get('cas').deliveries.at(-1);
+    expect(clear).toMatchObject({ type: 'fm.clear', ref: missionId, pid: pid(lead) });
+    const clearId = clear?.id ?? '';
     await until(() => {
       const d = jtac.store.get('cas').deliveries.find((x) => x.id === clearId);
       return d?.relay === true && d.receivedBy.includes(pid(lead));

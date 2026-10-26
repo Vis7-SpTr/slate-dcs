@@ -105,6 +105,25 @@ p {
   font: inherit;
 }
 
+.field select,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--touch);
+  padding: 0.6rem 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field select:focus,
+.field textarea:focus,
 .field input:focus {
   outline: 2px solid var(--blue);
   outline-offset: 1px;

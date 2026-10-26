@@ -21,7 +21,7 @@ import {
 } from './cas-fixtures.js';
 import { CheckInBrief, HoldDraft } from './checkins.js';
 import { MapEntryDraft } from './map-entries.js';
-import { FireMission, Mark } from './missions.js';
+import { FireMission, FmAbort, Mark } from './missions.js';
 import { SessionState } from './session.js';
 import { envelope } from './test-helpers.js';
 
@@ -306,6 +306,11 @@ describe('fire mission (§10.3, §10.4)', () => {
       locationText: '38T KM 12345 67890',
       location: { lat: 42.2203 },
     });
+  });
+  it('an abort always has a reason – it becomes the lane’s abort (P2.6b)', () => {
+    const abort = { missionId: 'm_1', pid: LEAD, channel: 'app' };
+    expect(FmAbort.shape.body.safeParse({ ...abort, reason: 'ABORT' }).success).toBe(true);
+    expect(FmAbort.shape.body.safeParse({ ...abort, reason: '' }).success).toBe(false);
   });
 });
 

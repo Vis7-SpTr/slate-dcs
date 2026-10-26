@@ -13,7 +13,8 @@
     label,
     onconfirm,
     disabled = false,
-  }: { label: string; onconfirm: () => void; disabled?: boolean } = $props();
+    danger = false,
+  }: { label: string; onconfirm: () => void; disabled?: boolean; danger?: boolean } = $props();
 
   /** How long the button stays armed. */
   const ARMED_MS = 3000;
@@ -39,7 +40,7 @@
   onDestroy(disarm);
 </script>
 
-<button type="button" class:armed {disabled} aria-live="polite" onclick={click}>
+<button type="button" class:armed class:danger {disabled} aria-live="polite" onclick={click}>
   <span class="label" class:hidden={armed}>{label}</span>
   <span class="label confirm" class:hidden={!armed}>{t('action.confirm')}</span>
 </button>
@@ -65,6 +66,12 @@
 
   .hidden {
     visibility: hidden;
+  }
+
+  /* ABORT and the like: red at rest too, always with its word (ui-design.md §1). */
+  button.danger {
+    border-color: var(--red);
+    color: var(--red);
   }
 
   button.armed {

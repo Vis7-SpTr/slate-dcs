@@ -4,16 +4,23 @@
   import EmptyState from '../../components/EmptyState.svelte';
   import { t } from '../../lib/i18n/index.js';
   import type { SubTabId } from '../../lib/router.svelte.js';
+  import { host } from '../../lib/host.svelte.js';
   import AircraftView from './AircraftView.svelte';
   import FlightView from './FlightView.svelte';
+  import StationView from './StationView.svelte';
 
   const { sub }: { sub: SubTabId } = $props();
+  const session = $derived(host.view.slices?.session ?? null);
 </script>
 
 {#if sub === 'aircraft'}
   <AircraftView />
 {:else if sub === 'flight'}
   <FlightView />
+{:else if !session || session.state === 'notJoined' || session.state === 'confirmFingerprint'}
+  <EmptyState title={t('soon.checkIn.title')} text={t('flight.noSession.text')} />
+{:else if session.role === 'jtac'}
+  <StationView />
 {:else}
   <EmptyState title={t('soon.checkIn.title')} text={t('soon.checkIn.text')} />
 {/if}

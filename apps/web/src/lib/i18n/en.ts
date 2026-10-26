@@ -3,6 +3,9 @@
 // here under a key, so more languages can be added without touching components.
 // Brevity codes and doctrine terms (CLEARED HOT, ABORT, JOKER, BINGO, 9-line
 // terms) stay English in every language. `{name}` marks a parameter.
+// The CAS texts live in en-cas.ts (P2.6).
+
+import { enCas } from './en-cas.js';
 
 export const en = {
   // Main tabs (ui-design.md §3); `.short` is used in very narrow windows.
@@ -66,7 +69,7 @@ export const en = {
   'soon.map.text': 'The moving map comes in P3. Map controls appear here with it.',
   'soon.mapControls': 'Map controls come with the moving map (P3).',
   'soon.checkIn.title': 'Check-in',
-  'soon.checkIn.text': 'Check-in to a JTAC or AO comes with CAS (P2).',
+  'soon.checkIn.text': 'The pilot’s check-in to a JTAC or AO comes with P2.7.',
   'soon.cas.title': 'CAS',
   'soon.cas.text': 'Flights, fire missions and the CAS log come in P2.',
   'soon.checklist.title': 'Checklists',
@@ -343,6 +346,7 @@ export const en = {
 
   // Generic
   'value.none': '—',
+  ...enCas,
 } as const;
 
 export type MessageKey = keyof typeof en;

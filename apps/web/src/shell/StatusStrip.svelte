@@ -9,6 +9,7 @@
   import { clock } from '../lib/clock.svelte.js';
   import { fuelUnit } from '@slate-dcs/shared';
 
+  import { casWho, checkInOf } from '../lib/cas.js';
   import { formatFuel, missionClock } from '../lib/format.js';
   import { host } from '../lib/host.svelte.js';
   import { t } from '../lib/i18n/index.js';
@@ -19,6 +20,9 @@
   const callsign = $derived.by(() => {
     const own = slices?.flight.own;
     const pid = slices?.session.pid;
+    // A JTAC on-station goes by his AO callsign (§8.2).
+    const jtac = slices?.cas.aos.flatMap((a) => a.jtacs).find((j) => j.pid === pid);
+    if (jtac) return jtac.callsign;
     if (!own) return t('strip.noFlight');
     const member = own.members.find((m) => m.pid === pid);
     return member ? `${own.display}-${member.pos}` : own.display;
@@ -36,6 +40,15 @@
       : t('value.none');
   });
 
+  /** A JTAC's AO while on-station, a pilot's AO while his flight is checked in (§8, §9). */
+  const checkIn = $derived.by(() => {
+    if (!slices) return null;
+    const ao = casWho(slices).ao;
+    if (ao) return { text: ao.name, on: true };
+    const own = checkInOf(slices, slices.flight.own?.flightId);
+    const name = slices.cas.aos.find((a) => a.aoId === own?.aoId)?.name;
+    return name ? { text: name, on: true } : null;
+  });
   const bridge = $derived(slices?.host.bridge.state ?? 'waiting');
   const relay = $derived(slices?.host.relay.state ?? 'notConnected');
   /** A DCS folder whose SLATE files need repair (P1.3) – tap goes to More → DCS. */
@@ -84,7 +97,7 @@
 
     <div class="item">
       <span class="label">{t('strip.checkIn')}</span>
-      <span class="value">{t('strip.notCheckedIn')}</span>
+      <span class="value" class:on={checkIn?.on}>{checkIn?.text ?? t('strip.notCheckedIn')}</span>
     </div>
 
     <div class="item clock">
@@ -137,6 +150,11 @@
   .dim {
     color: var(--text-dim);
     font-weight: 400;
+  }
+
+  /* Checked in / on-station: green with its name (ui-design.md §1). */
+  .value.on {
+    color: var(--green);
   }
 
   .callsign .value {
