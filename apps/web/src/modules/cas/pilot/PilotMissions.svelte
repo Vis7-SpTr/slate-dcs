@@ -20,6 +20,9 @@
   import { alerts } from '../../../shell/alerts.svelte.js';
   import PilotMissionCard from './PilotMissionCard.svelte';
 
+  /** `embedded`: part of the pilot's CAS page – nothing is shown while there is no mission. */
+  const { embedded = false }: { embedded?: boolean } = $props();
+
   const slices = $derived(host.view.slices);
   const pid = $derived(slices?.session.pid ?? null);
 
@@ -47,7 +50,9 @@
   const current = $derived(missions.find((m) => m.missionId === picked) ?? missions[0] ?? null);
 </script>
 
-{#if !slices || slices.session.state !== 'joined'}
+{#if embedded && missions.length === 0}
+  <!-- nothing yet -->
+{:else if !slices || slices.session.state !== 'joined'}
   <EmptyState title={t('sub.cas.missions')} text={t('cas.noSession')} />
 {:else if missions.length === 0}
   <EmptyState title={t('sub.cas.missions')} text={t('pilot.fm.none')} />

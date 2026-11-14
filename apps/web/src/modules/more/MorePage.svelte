@@ -4,6 +4,7 @@
   import EmptyState from '../../components/EmptyState.svelte';
   import { t } from '../../lib/i18n/index.js';
   import type { SubTabId } from '../../lib/router.svelte.js';
+  import CasLogView from './CasLogView.svelte';
   import DcsView from './DcsView.svelte';
   import SessionView from './SessionView.svelte';
   import SettingsView from './SettingsView.svelte';
@@ -24,5 +25,5 @@
 {:else if sub === 'dtc'}
   <EmptyState title={t('soon.dtc.title')} text={t('soon.dtc.text')} />
 {:else}
-  <EmptyState title={t('soon.log.title')} text={t('soon.log.text')} />
+  <CasLogView />
 {/if}

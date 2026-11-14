@@ -2,8 +2,10 @@
 <!--
   CAS → Flights for a JTAC (ui-design.md §7, P2.6): one card per flight
   checked in to his AO – callsign, aircraft, playtime left, ordnance, fuel and
-  status age per aircraft, laser codes, hold, missions, fuel calls. Opening a
-  card shows the rest of the brief. SIT UPDATE, HOLD and RELEASE in fixed slots.
+  status age per aircraft, laser codes, hold, fuel calls – and the flight's
+  open missions inline with their lanes, so the JTAC works a flight from its
+  card (workflow compression). Opening a card shows the rest of the brief.
+  SIT UPDATE, HOLD, NEW MISSION and RELEASE in fixed slots.
 -->
 <script lang="ts">
   import { fuelUnit, unitDisplayName } from '@slate-dcs/shared';
@@ -13,13 +15,24 @@
   import CommandStatus from '../../../components/CommandStatus.svelte';
   import ConfirmButton from '../../../components/ConfirmButton.svelte';
   import EmptyState from '../../../components/EmptyState.svelte';
-  import { callsignOf, casWho, mtimeText, pointText, altText } from '../../../lib/cas.js';
+  import {
+    altText,
+    callsignOf,
+    casWho,
+    laserUses,
+    mtimeText,
+    pointText,
+    sharedCodes,
+  } from '../../../lib/cas.js';
   import { clock } from '../../../lib/clock.svelte.js';
   import { formatAge, formatFuel } from '../../../lib/format.js';
   import { host } from '../../../lib/host.svelte.js';
   import { t } from '../../../lib/i18n/index.js';
+  import { CLOSED_STATES } from '../../../lib/missions.js';
   import HoldForm from '../HoldForm.svelte';
   import SitUpdateForm from '../SitUpdateForm.svelte';
+  import MissionEditor from './MissionEditor.svelte';
+  import MissionView from './MissionView.svelte';
 
   const slices = $derived(host.view.slices);
   const who = $derived(slices ? casWho(slices) : null);
@@ -28,8 +41,10 @@
 
   /** Screen-local: which card is open and which form shows. */
   let openCard: string | null = $state(null);
-  let form: { flightId: string; kind: 'sit' | 'hold' } | null = $state(null);
+  let form: { flightId: string; kind: 'sit' | 'hold' | 'mission' } | null = $state(null);
   let command: string | null = $state(null);
+  /** Codes more than one laser in the AO uses – a hint, not a conflict by itself (§9.5). */
+  const shared = $derived(slices ? sharedCodes(laserUses(slices)) : new Set<number>());
 
   function types(c: CheckIn): string {
     const counts: Record<string, number> = {};
@@ -117,7 +132,11 @@
                     )
                   : t('value.none')}
               </span>
-              <span class="mono">{t('cas.code', { code: codeOf(c, a.pid) ?? '—' })}</span>
+              <span class="mono" class:amber-text={shared.has(codeOf(c, a.pid) ?? 0)}>
+                {t('cas.code', { code: codeOf(c, a.pid) ?? '—' })}{shared.has(codeOf(c, a.pid) ?? 0)
+                  ? ` ${t('cas.codeShared')}`
+                  : ''}
+              </span>
               <span class="dim"
                 >{s ? formatAge(clock.now - s.receivedAt) : t('flight.noStatus')}</span
               >
@@ -135,12 +154,20 @@
             {#if hold.conflicts.length > 0}<span class="tag amber">{t('hold.conflict')}</span>{/if}
           </p>
         {/if}
-        {#if missions.length > 0}
+        {#each missions.filter((m) => !CLOSED_STATES.has(m.state)) as m (m.missionId)}
+          <div class="inline-mission">
+            <MissionView mission={m} compact />
+          </div>
+        {/each}
+        {#if missions.some((m) => CLOSED_STATES.has(m.state))}
           <p class="line">
-            <span class="label">{t('cas.missions')}</span>
-            <span
-              >{missions.map((m) => `${m.missionId} ${t(`fm.state.${m.state}`)}`).join(' · ')}</span
-            >
+            <span class="label">{t('cas.missionsClosed')}</span>
+            <span>
+              {missions
+                .filter((m) => CLOSED_STATES.has(m.state))
+                .map((m) => `${m.missionId} ${t(`fm.state.${m.state}`)}`)
+                .join(' · ')}
+            </span>
           </p>
         {/if}
 
@@ -195,6 +222,17 @@
               form = null;
             }}
           />
+        {:else if form?.flightId === c.flightId && form.kind === 'mission'}
+          <MissionEditor
+            aoId={ao.aoId}
+            flightId={c.flightId}
+            onclose={() => {
+              form = null;
+            }}
+            onsaved={() => {
+              form = null;
+            }}
+          />
         {:else if form?.flightId === c.flightId && form.kind === 'hold'}
           <HoldForm
             aoId={ao.aoId}
@@ -222,6 +260,13 @@
               form = { flightId: c.flightId, kind: 'hold' };
             }}>{hold ? t('cas.holdChange') : t('cas.holdAssign')}</button
           >
+          <button
+            type="button"
+            class="btn"
+            onclick={() => {
+              form = { flightId: c.flightId, kind: 'mission' };
+            }}>{t('fm.newFor')}</button
+          >
           <span class="spacer"></span>
           <ConfirmButton
             label={t('cas.release')}
@@ -237,6 +282,29 @@
 {/if}
 
 <style>
+  /* Narrow windows: the four actions as an even 2 × 2 block, RELEASE still last. */
+  @media (max-width: 30rem) {
+    .actions :global(button) {
+      flex: 1 1 8rem;
+      min-width: 0;
+    }
+
+    .actions .spacer {
+      display: none;
+    }
+  }
+
+  .inline-mission {
+    margin: 0.5rem 0;
+    padding: 0.6rem;
+    border: 1px solid var(--blue);
+    border-radius: var(--radius);
+  }
+
+  .amber-text {
+    color: var(--amber);
+  }
+
   .board {
     display: grid;
     gap: 0.75rem;

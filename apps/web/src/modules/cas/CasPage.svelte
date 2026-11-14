@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!--
-  CAS: Flights · Fire missions · Other (ui-design.md §7). A JTAC gets the
-  board views (P2.6), a pilot his flight and his own lane (P2.7).
+  CAS (ui-design.md §7). A JTAC: Flights (his workspace) · Fire missions ·
+  Other. A pilot: one CAS page for whatever phase he is in · Other.
 -->
 <script lang="ts">
   import { host } from '../../lib/host.svelte.js';
@@ -9,8 +9,7 @@
   import FlightsBoard from './jtac/FlightsBoard.svelte';
   import MissionsBoard from './jtac/MissionsBoard.svelte';
   import OtherView from './OtherView.svelte';
-  import PilotFlights from './pilot/PilotFlights.svelte';
-  import PilotMissions from './pilot/PilotMissions.svelte';
+  import PilotCas from './pilot/PilotCas.svelte';
 
   const { sub }: { sub: SubTabId } = $props();
   const jtac = $derived(host.view.slices?.session.role === 'jtac');
@@ -19,15 +18,11 @@
 {#key sub}
   {#if sub === 'other'}
     <OtherView />
+  {:else if !jtac}
+    <PilotCas />
   {:else if sub === 'flights'}
-    {#if jtac}
-      <FlightsBoard />
-    {:else}
-      <PilotFlights />
-    {/if}
-  {:else if jtac}
-    <MissionsBoard />
+    <FlightsBoard />
   {:else}
-    <PilotMissions />
+    <MissionsBoard />
   {/if}
 {/key}

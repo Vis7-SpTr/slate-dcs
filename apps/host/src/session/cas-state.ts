@@ -179,7 +179,19 @@ export class CasState {
       }
       case 'cas.hold.updated': {
         const hold = message.body;
-        this.#set({ ...cas, holds: upsert(cas.holds, hold, (h) => h.holdId === hold.holdId) });
+        // A changed hold needs a new WILCO; a changed conflict list alone doesn't.
+        const before = cas.holds.find((h) => h.holdId === hold.holdId);
+        const same =
+          before !== undefined &&
+          JSON.stringify({ ...before, conflicts: [] }) ===
+            JSON.stringify({ ...hold, conflicts: [] });
+        this.#set({
+          ...cas,
+          holds: upsert(cas.holds, hold, (h) => h.holdId === hold.holdId),
+          holdWilcos: same
+            ? cas.holdWilcos
+            : cas.holdWilcos.filter((w) => w.holdId !== hold.holdId),
+        });
         return true;
       }
       case 'cas.hold.cancelled': {
@@ -312,6 +324,19 @@ export class CasState {
   }
 
   /** This pilot pressed COPY. */
+  /** This host sent WILCO for a hold: kept, so its screens stop asking (the relay doesn't echo it). */
+  wilcoed(holdId: string, pid: string): void {
+    const cas = this.cas;
+    this.#set({
+      ...cas,
+      holdWilcos: upsert(
+        cas.holdWilcos,
+        { holdId, pid, at: this.#now() },
+        (w) => w.holdId === holdId && w.pid === pid,
+      ),
+    });
+  }
+
   copied(id: string): void {
     const cas = this.cas;
     this.#set({

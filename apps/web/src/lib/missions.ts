@@ -19,6 +19,7 @@ import type {
   Lane,
   LatLon,
   LinkedText,
+  MapEntry,
   Mark,
   MissionContent,
   PointRef,
@@ -103,10 +104,17 @@ export function stepReady(m: FireMission, step: MissionSlots['next']): boolean {
 
 export type LaneButton = 'correlated' | 'hot' | 'dry' | 'waitingBda' | 'bda' | 'reattack';
 
-/** A lane's buttons in three fixed slots: next step, the other choice, ABORT far right. */
+/**
+ * A lane's buttons in four fixed slots. Every button has its own slot and
+ * never moves, so a second tap can't land on another action: next step ·
+ * CONTINUE DRY or BDA · RE-ATTACK · ABORT far right.
+ */
 export interface LaneSlots {
-  first: LaneButton | null;
-  second: LaneButton | null;
+  /** CORRELATED, CLEARED HOT or WAITING BDA. */
+  first: 'correlated' | 'hot' | 'waitingBda' | null;
+  /** CONTINUE DRY, or BDA (also straight from a cleared lane). */
+  second: 'dry' | 'bda' | null;
+  third: 'reattack' | null;
   /** ABORT offered: a cleared lane, to any JTAC of the AO (§10.6). */
   abort: boolean;
 }
@@ -116,22 +124,23 @@ export interface LaneSlots {
  * cleared by the mission's window, so it has no CLEARED HOT / CONTINUE DRY.
  */
 export function laneSlots(m: FireMission, lane: Lane, rights: MissionRights): LaneSlots {
-  const none: LaneSlots = { first: null, second: null, abort: false };
+  const none: LaneSlots = { first: null, second: null, third: null, abort: false };
   if (!rights.open || m.state !== 'readbackCorrect') return none;
   const abort = rights.jtac && lane.state === 'cleared';
   if (!rights.inCommand) return { ...none, abort };
   const type3 = m.gamePlan?.control === 3;
   switch (lane.state) {
     case 'open':
-      return { first: 'correlated', second: null, abort };
+      return { ...none, first: 'correlated' };
     case 'correlated':
-      return type3 ? none : { first: 'hot', second: 'dry', abort };
+      return type3 ? none : { ...none, first: 'hot', second: 'dry' };
     case 'cleared':
-      return { first: 'waitingBda', second: null, abort };
+      // BDA straight from a cleared lane ends the attack and passes the BDA in one go.
+      return { ...none, first: 'waitingBda', second: 'bda', abort };
     case 'waitingBda':
-      return { first: 'bda', second: 'reattack', abort };
+      return { ...none, second: 'bda', third: 'reattack' };
     case 'bda':
-      return { first: null, second: 'reattack', abort };
+      return { ...none, third: 'reattack' };
   }
 }
 
@@ -449,4 +458,138 @@ export function abortNotice(m: FireMission, pid: string | null): AbortNotice | n
 export function pendingRevs(m: FireMission, pid: string | null): number[] {
   if (pid === null || !ownLane(m, pid)) return [];
   return m.changes.filter((c) => !c.ackedBy.includes(pid)).map((c) => c.rev);
+}
+
+// ---------------------------------------------------------------------------
+// Fewer presses (workflow compression): steps that always go together.
+
+/** Game plan and a line 6: enough to assign and brief in one press. */
+export function canSendBrief(m: Pick<FireMission, 'gamePlan' | 'nineLine'>): boolean {
+  return m.gamePlan !== null && m.nineLine?.location != null;
+}
+
+/** Lanes CORRELATED – ALL would mark: every open lane after the readback. */
+export function correlatable(m: FireMission): string[] {
+  if (m.state !== 'readbackCorrect') return [];
+  return m.lanes.filter((l) => l.state === 'open').map((l) => l.pid);
+}
+
+/** Lanes CLEARED HOT – FLIGHT would clear: every correlated lane of a Type 1/2 mission. */
+export function clearable(m: FireMission): string[] {
+  if (m.state !== 'readbackCorrect' || m.gamePlan?.control === 3) return [];
+  return m.lanes.filter((l) => l.state === 'correlated').map((l) => l.pid);
+}
+
+/**
+ * Laser conflicts clearing several lanes at once would cause: with lanes
+ * already cleared in the AO, and among the lanes themselves (the same code
+ * from different sources). Flagged, never blocked (§10.6).
+ */
+export function groupClearConflicts(slices: Slices, m: FireMission, pids: string[]): LaserClash[] {
+  const clash = pids.flatMap((pid) => clearConflicts(slices, m, pid));
+  const lasers = pids.map((pid) => ({ pid, laser: laneLaser(slices, m, pid) }));
+  for (const a of lasers) {
+    const other = lasers.find(
+      (b) =>
+        b.pid !== a.pid &&
+        a.laser !== null &&
+        b.laser?.code === a.laser.code &&
+        b.laser.source !== a.laser.source,
+    );
+    if (other) clash.push({ missionId: m.missionId, pid: a.pid });
+  }
+  const seen = new Set<string>();
+  return clash.filter((c) => {
+    const key = `${c.missionId}:${c.pid}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Every lane has its BDA: COMPLETE is offered (the JTAC still presses it). */
+export function readyToComplete(m: FireMission): boolean {
+  return (
+    m.state === 'readbackCorrect' && m.lanes.length > 0 && m.lanes.every((l) => l.state === 'bda')
+  );
+}
+
+/** Lines 5 and 6 from an enemy or threat marker (a point, or a circle's centre). */
+export function targetFromEntry(entry: MapEntry): { description: string; location: LatLon } | null {
+  if (entry.kind !== 'enemy' && entry.kind !== 'threat') return null;
+  const geom = entry.geom as LatLon | { center: LatLon } | LatLon[];
+  const location = Array.isArray(geom) ? null : 'center' in geom ? geom.center : geom;
+  if (!location) return null;
+  const count = entry.count !== null && entry.count > 1 ? `${String(entry.count)}x ` : '';
+  const moving = entry.moving === true ? ', moving' : '';
+  const description = `${count}${entry.label ?? entry.text ?? ''}${moving}`.trim();
+  return { description, location: { lat: location.lat, lon: location.lon } };
+}
+
+// ---------------------------------------------------------------------------
+// What a pilot still has to answer – shown on the alert bar on every page.
+
+export type PilotTodo =
+  | { kind: 'wilco'; key: string; holdId: string; point: PointRef }
+  | { kind: 'copy'; key: string; noteId: string; from: string; whole: boolean }
+  | { kind: 'ack'; key: string; missionId: string; revs: number[]; fields: string[] }
+  | { kind: 'ackBda'; key: string; missionId: string; effect: string; target: string };
+
+/**
+ * Open answers, most urgent first: changes to ACK, a hold to WILCO, a
+ * situation update to COPY, a BDA to ACK. WILCO and COPY are the flight's
+ * answer, so only the member in command is asked; changes and BDA are per
+ * aircraft (§10.5).
+ */
+export function pilotTodos(slices: Slices): PilotTodo[] {
+  const pid = slices.session.pid;
+  const own = slices.flight.own;
+  if (slices.session.role === 'jtac' || pid === null || !own) return [];
+  const todos: PilotTodo[] = [];
+  for (const m of slices.missions.missions) {
+    if (CLOSED_STATES.has(m.state)) continue;
+    const revs = pendingRevs(m, pid);
+    if (revs.length > 0) {
+      const fields = m.changes.filter((c) => revs.includes(c.rev)).flatMap((c) => c.fields);
+      todos.push({
+        kind: 'ack',
+        key: `ack:${m.missionId}:${revs.join(',')}`,
+        missionId: m.missionId,
+        revs,
+        fields: [...new Set(fields)],
+      });
+    }
+  }
+  if (own.inCommand === pid) {
+    for (const h of slices.cas.holds) {
+      if (h.flightId !== own.flightId) continue;
+      if (slices.cas.holdWilcos.some((w) => w.holdId === h.holdId && w.pid === pid)) continue;
+      todos.push({ kind: 'wilco', key: `wilco:${h.holdId}`, holdId: h.holdId, point: h.point });
+    }
+    for (const n of slices.cas.sitUpdates) {
+      if (n.copied || n.from === pid) continue;
+      if (n.flightId !== null && n.flightId !== own.flightId) continue;
+      todos.push({
+        kind: 'copy',
+        key: `copy:${n.id}`,
+        noteId: n.id,
+        from: n.from,
+        whole: n.flightId === null,
+      });
+    }
+  }
+  for (const m of slices.missions.missions) {
+    if (CLOSED_STATES.has(m.state)) continue;
+    const bda = ownLane(m, pid)?.bda;
+    if (bda && !bda.acked) {
+      todos.push({
+        kind: 'ackBda',
+        key: `bda:${m.missionId}:${String(bda.mtime ?? 0)}`,
+        missionId: m.missionId,
+        effect: bda.effect,
+        target: bda.target,
+      });
+    }
+  }
+  return todos;
 }

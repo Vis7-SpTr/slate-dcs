@@ -42,6 +42,7 @@ class HostStore {
   start(): void {
     this.#connection.subscribe((view) => {
       this.view = view;
+      this.#advance(view);
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') this.#connection.wake();
@@ -51,6 +52,35 @@ class HostStore {
 
   send(command: Command): string {
     return this.#connection.send(command);
+  }
+
+  /**
+   * Commands that belong to one press (e.g. assign + brief): each is sent
+   * when the one before it was taken; a refused or unanswered one stops the
+   * rest. Returns the first command's ID.
+   */
+  sequence(commands: Command[]): string | null {
+    const [first, ...rest] = commands;
+    if (!first) return null;
+    const id = this.send(first);
+    if (rest.length > 0) this.#chains.push({ waitFor: id, rest });
+    return id;
+  }
+
+  /** Commands waiting for the one before them. */
+  #chains: { waitFor: string; rest: Command[] }[] = [];
+
+  #advance(view: ConnectionView): void {
+    if (this.#chains.length === 0) return;
+    const chains = this.#chains;
+    this.#chains = [];
+    for (const chain of chains) {
+      if (view.pending.some((entry) => entry.id === chain.waitFor)) {
+        this.#chains.push(chain);
+      } else if (view.lastFailure?.id !== chain.waitFor) {
+        this.sequence(chain.rest);
+      }
+    }
   }
 
   retry(id: string): void {

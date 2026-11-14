@@ -10,12 +10,19 @@ import {
   emptyContent,
   laneLaser,
   abortNotice,
+  canSendBrief,
+  clearable,
+  correlatable,
+  groupClearConflicts,
   laneSlots,
   missionRights,
   missionSlots,
   pendingAcks,
   pendingRevs,
   pilotClearance,
+  pilotTodos,
+  readyToComplete,
+  targetFromEntry,
   spiOffset,
   stepReady,
 } from './missions.js';
@@ -155,13 +162,15 @@ describe('lane buttons in fixed slots (§10.3, §10.6)', () => {
   it('one step at a time; ABORT only while cleared, for every JTAC of the AO', () => {
     const slots = (state: Lane['state'], rights = inCommand, m = mission()) =>
       laneSlots(m, lane(LEAD, state), rights);
-    expect(slots('open')).toEqual({ first: 'correlated', second: null, abort: false });
-    expect(slots('correlated')).toEqual({ first: 'hot', second: 'dry', abort: false });
-    expect(slots('cleared')).toEqual({ first: 'waitingBda', second: null, abort: true });
-    expect(slots('waitingBda')).toEqual({ first: 'bda', second: 'reattack', abort: false });
-    expect(slots('bda')).toEqual({ first: null, second: 'reattack', abort: false });
-    expect(slots('cleared', other)).toEqual({ first: null, second: null, abort: true });
-    expect(slots('correlated', other)).toEqual({ first: null, second: null, abort: false });
+    const none = { first: null, second: null, third: null, abort: false };
+    expect(slots('open')).toEqual({ ...none, first: 'correlated' });
+    expect(slots('correlated')).toEqual({ ...none, first: 'hot', second: 'dry' });
+    expect(slots('cleared')).toEqual({ ...none, first: 'waitingBda', second: 'bda', abort: true });
+    // BDA and RE-ATTACK keep their slots: a second tap on WAITING BDA hits nothing.
+    expect(slots('waitingBda')).toEqual({ ...none, second: 'bda', third: 'reattack' });
+    expect(slots('bda')).toEqual({ ...none, third: 'reattack' });
+    expect(slots('cleared', other)).toEqual({ ...none, abort: true });
+    expect(slots('correlated', other)).toEqual(none);
   });
 
   it('a Type 3 lane is cleared by the window, not by CLEARED HOT', () => {
@@ -170,6 +179,7 @@ describe('lane buttons in fixed slots (§10.3, §10.6)', () => {
     expect(laneSlots(type3, lane(LEAD, 'correlated'), inCommand)).toEqual({
       first: null,
       second: null,
+      third: null,
       abort: false,
     });
   });
@@ -319,5 +329,116 @@ describe('the pilot’s own lane (P2.7)', () => {
     expect(pendingRevs(m, LEAD)).toEqual([3]);
     expect(pendingRevs(m, WING)).toEqual([2, 3]);
     expect(pendingRevs(m, 'p_000000')).toEqual([]);
+  });
+});
+
+describe('fewer presses (workflow compression)', () => {
+  it('group steps take the lanes that are ready for them', () => {
+    const m = mission({ lanes: [lane(LEAD, 'correlated'), lane(WING, 'open')] });
+    expect(correlatable(m)).toEqual([WING]);
+    expect(clearable(m)).toEqual([LEAD]);
+    expect(correlatable(mission({ state: 'briefed' }))).toEqual([]);
+    const base = mission();
+    const type3 = mission({ gamePlan: base.gamePlan && { ...base.gamePlan, control: 3 } });
+    expect(clearable(type3)).toEqual([]);
+  });
+
+  it('clearing the flight warns when its own lasers share a code', () => {
+    // Lead on the flight code 1688, wing on his own 1511: no clash.
+    const both = mission({ lanes: [lane(LEAD, 'correlated'), lane(WING, 'correlated')] });
+    expect(groupClearConflicts(slices(JTAC), both, [LEAD, WING])).toEqual([]);
+    // Both on 1688, each lasing for himself: flagged for both.
+    const same = slices(JTAC, (s) => {
+      s.cas = { ...s.cas, checkIns: [checkIn('f_1', 1688, {})] };
+    });
+    expect(groupClearConflicts(same, both, [LEAD, WING]).map((c) => c.pid)).toEqual([LEAD, WING]);
+  });
+
+  it('brief in one press needs a game plan and line 6; complete is offered after every BDA', () => {
+    expect(canSendBrief(mission())).toBe(true);
+    expect(canSendBrief(mission({ gamePlan: null }))).toBe(false);
+    const bda = {
+      target: '',
+      effect: 'destroyed' as const,
+      location: null,
+      mtime: 1,
+      remarks: '',
+      acked: false,
+    };
+    expect(readyToComplete(mission({ lanes: [lane(LEAD, 'bda', { bda })] }))).toBe(true);
+    expect(readyToComplete(mission())).toBe(false);
+  });
+
+  it('a target from a map entry gives lines 5 and 6', () => {
+    const entry = {
+      kind: 'enemy',
+      shape: 'point',
+      geom: { lat: 42.22, lon: 41.74 },
+      label: 'BMP-2',
+      text: null,
+      count: 2,
+      moving: true,
+    } as Parameters<typeof targetFromEntry>[0];
+    expect(targetFromEntry(entry)).toEqual({
+      description: '2x BMP-2, moving',
+      location: { lat: 42.22, lon: 41.74 },
+    });
+    expect(targetFromEntry({ ...entry, kind: 'ip' })).toBeNull();
+  });
+});
+
+describe('what a pilot still has to answer', () => {
+  const hold = {
+    holdId: 'h_1',
+    aoId: AO,
+    flightId: 'f_1',
+    point: { lat: 42.3, lon: 41.6 },
+    conflicts: [],
+  } as unknown as Slices['cas']['holds'][number];
+  const note = (copied: boolean) =>
+    ({
+      id: '01JABD2K7Q0M3N4P5R6S7T8V9W',
+      aoId: AO,
+      flightId: 'f_1',
+      from: JTAC,
+      copied,
+    }) as unknown as Slices['cas']['sitUpdates'][number];
+  const flight = (inCommand: string) =>
+    ({ flightId: 'f_1', inCommand, members: [] }) as unknown as NonNullable<
+      Slices['flight']['own']
+    >;
+
+  function pilot(pid: string, change: (s: Slices) => void = () => undefined): Slices {
+    return slices(pid, (s) => {
+      s.flight = { ...s.flight, own: flight(LEAD) };
+      s.cas = { ...s.cas, holds: [hold], sitUpdates: [note(false)] };
+      s.missions = {
+        missions: [
+          mission({
+            lanes: [lane(pid, 'correlated')],
+            changes: [{ rev: 2, fields: ['nineLine.egress'], old: {}, ackedBy: [] }],
+          }),
+        ],
+      };
+      change(s);
+    });
+  }
+
+  it('the lead is asked for WILCO and COPY; every aircraft for its own ACK', () => {
+    expect(pilotTodos(pilot(LEAD)).map((x) => x.kind)).toEqual(['ack', 'wilco', 'copy']);
+    expect(pilotTodos(pilot(WING)).map((x) => x.kind)).toEqual(['ack']);
+    expect(pilotTodos(slices(JTAC))).toEqual([]);
+  });
+
+  it('answered items go away', () => {
+    const done = pilot(LEAD, (s) => {
+      s.cas = {
+        ...s.cas,
+        holdWilcos: [{ holdId: 'h_1', pid: LEAD, at: 1 }],
+        sitUpdates: [note(true)],
+      };
+      s.missions = { missions: [mission({ lanes: [lane(LEAD, 'correlated')] })] };
+    });
+    expect(pilotTodos(done)).toEqual([]);
   });
 });

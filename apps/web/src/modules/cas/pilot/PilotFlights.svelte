@@ -13,6 +13,7 @@
   import Card from '../../../components/Card.svelte';
   import CommandStatus from '../../../components/CommandStatus.svelte';
   import EmptyState from '../../../components/EmptyState.svelte';
+  import Fold from '../../../components/Fold.svelte';
   import Ticks from '../../../components/Ticks.svelte';
   import {
     altText,
@@ -31,6 +32,9 @@
   import { formatAge, formatFuel } from '../../../lib/format.js';
   import { host } from '../../../lib/host.svelte.js';
   import { t } from '../../../lib/i18n/index.js';
+
+  /** `folded`: a mission is up – hold, updates and flight fold to one line each. */
+  const { folded = false }: { folded?: boolean } = $props();
 
   const slices = $derived(host.view.slices);
   const who = $derived(slices ? casWho(slices) : null);
@@ -90,118 +94,142 @@
   <EmptyState title={t('cas.flights')} text={t('brief.noFlight')} />
 {:else}
   <div class="board">
-    <Card title={own.display}>
-      {#if checkIn}
-        <p class="state ok">{t('brief.checkedIn', { ao: ao?.name ?? checkIn.aoId })}</p>
-        {#if checkIn.primary}
-          <p class="dim">{t('cas.primary', { jtac: callsignOf(slices, checkIn.primary) })}</p>
-        {/if}
-      {:else}
-        <p class="state">{t('brief.notCheckedIn')}</p>
-        <p class="dim">{t('pilot.checkInHint')}</p>
-      {/if}
-
-      {#if ao}
-        <h4>{t('station.jtacs')}</h4>
-        <ul class="list">
-          {#each ao.jtacs as j (j.pid)}
-            <li>
-              <span class="who">{j.callsign}</span>
-              {#if ao.inCommand === j.pid}<span class="dim">{t('station.inCommand')}</span>{/if}
-              {#if j.presence === 'lost'}<span class="amber">{t('flight.lost')}</span>{/if}
-              <span class="mono freqs">
-                {j.freqs
-                  .map((f) => `${f.mhz.toFixed(3)}${f.label ? ` ${f.label}` : ''}`)
-                  .join(' · ') || t('value.none')}
-              </span>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-
-      <h4>{t('pilot.members')}</h4>
-      <ul class="list">
-        {#each members as m (m.pid)}
-          {@const code =
-            checkIn?.brief.laserCodes.perAircraft[m.pid] ?? checkIn?.brief.laserCodes.flight}
-          <li class:me={m.pid === slices.session.pid}>
-            <span class="who">{own.display}-{m.pos}</span>
-            <span>{m.aircraft?.type ? unitDisplayName(m.aircraft.type) : '—'}</span>
-            <span class="mono">{formatFuel(fuelOf(m.pid), fuelUnit(m.aircraft?.type))}</span>
-            {#if code}<span class="mono">{t('cas.code', { code })}</span>{/if}
-            {#if m.presence === 'lost'}<span class="amber">{t('flight.lost')}</span>{/if}
-            <span class="dim">{ageOf(m.pid)}</span>
-          </li>
-        {/each}
-      </ul>
-
-      {#each calls as c, i (i)}
-        <p class="call {c.call}">
-          {c.callsign}
-          {c.call.toUpperCase()} · {formatFuel(
-            c.internalKg,
-            fuelUnit(slices.ownship.aircraft?.type),
-          )}
-        </p>
-      {/each}
-    </Card>
-
     {#if hold}
       {@const p = pointText(slices, hold.point)}
       {@const wilco = deliveryOf(slices, 'cas.hold.wilco', hold.holdId)}
-      <Card title={t('cas.hold')}>
-        <p class="big">{p.name ?? t('cas.coords')}</p>
-        {#if p.at}<p class="mono">{positionText(p.at, who.style).join(' · ')}</p>{/if}
-        <p class="mono">{altText(hold.floor)} – {altText(hold.ceiling)}</p>
-        <p>{holdShapeText(hold)}</p>
-        <p class="dim">
-          {hold.from === null ? '' : mtimeText(slices, hold.from)} –
-          {hold.until === null ? t('hold.open') : mtimeText(slices, hold.until)}
-        </p>
-        <div class="row-actions">
-          <button
-            type="button"
-            class="btn primary"
-            disabled={busy}
-            onclick={() => {
-              command = host.send({ cmd: 'cas.hold.wilco', args: { holdId: hold.holdId } });
-            }}>WILCO</button
-          >
-          <Ticks level={tickLevel(wilco, null, false)} />
-        </div>
-      </Card>
+      {@const wilcoed = slices.cas.holdWilcos.some(
+        (w) => w.holdId === hold.holdId && w.pid === slices.session.pid,
+      )}
+      <Fold
+        title={t('cas.hold')}
+        note={`${p.name ?? t('cas.coords')} · ${altText(hold.floor)} – ${altText(hold.ceiling)}${wilcoed ? ' · WILCO' : ''}`}
+        open={!folded || !wilcoed}
+      >
+        <Card title={p.name ?? t('cas.coords')}>
+          {#if p.at}<p class="mono">{positionText(p.at, who.style).join(' · ')}</p>{/if}
+          <p class="mono">{altText(hold.floor)} – {altText(hold.ceiling)}</p>
+          <p>{holdShapeText(hold)}</p>
+          <p class="dim">
+            {hold.from === null ? '' : mtimeText(slices, hold.from)} –
+            {hold.until === null ? t('hold.open') : mtimeText(slices, hold.until)}
+          </p>
+          <div class="row-actions">
+            {#if wilcoed}
+              <span class="ok">{t('pilot.wilcoSent')}</span>
+            {:else}
+              <button
+                type="button"
+                class="btn primary"
+                disabled={busy}
+                onclick={() => {
+                  command = host.send({ cmd: 'cas.hold.wilco', args: { holdId: hold.holdId } });
+                }}>WILCO</button
+              >
+            {/if}
+            <Ticks level={tickLevel(wilco, null, false)} />
+          </div>
+        </Card>
+      </Fold>
     {/if}
 
     {#each notes as n (n.id)}
-      <Card
+      <Fold
         title={n.flightId === null
           ? t('pilot.sitAll', { from: callsignOf(slices, n.from) })
           : t('pilot.sit', { from: callsignOf(slices, n.from) })}
+        note={n.copied ? t('pilot.copied') : ''}
+        open={!folded || !n.copied}
       >
-        {#each filled(n) as [field, text] (field)}
-          <p class="line">
-            <span class="label">{t(sitLabel[field])}</span>
-            <span>{text}</span>
-          </p>
-        {:else}
-          <p class="dim">{t('value.none')}</p>
-        {/each}
-        <div class="row-actions">
-          {#if n.copied}
-            <span class="ok">{t('pilot.copied')}</span>
+        <Card title={t('cas.sitUpdate')}>
+          {#each filled(n) as [field, text] (field)}
+            <p class="line">
+              <span class="label">{t(sitLabel[field])}</span>
+              <span>{text}</span>
+            </p>
           {:else}
-            <button
-              type="button"
-              class="btn primary"
-              disabled={busy}
-              onclick={() => {
-                command = host.send({ cmd: 'cas.sitCopy', args: { id: n.id } });
-              }}>COPY</button
-            >
-          {/if}
-        </div>
-      </Card>
+            <p class="dim">{t('value.none')}</p>
+          {/each}
+          <div class="row-actions">
+            {#if n.copied}
+              <span class="ok">{t('pilot.copied')}</span>
+            {:else}
+              <button
+                type="button"
+                class="btn primary"
+                disabled={busy}
+                onclick={() => {
+                  command = host.send({ cmd: 'cas.sitCopy', args: { id: n.id } });
+                }}>COPY</button
+              >
+            {/if}
+          </div>
+        </Card>
+      </Fold>
     {/each}
+
+    <Fold
+      title={own.display}
+      note={checkIn
+        ? t('brief.checkedIn', { ao: ao?.name ?? checkIn.aoId })
+        : t('brief.notCheckedIn')}
+      open={!folded}
+    >
+      <Card title={own.display}>
+        {#if checkIn}
+          <p class="state ok">{t('brief.checkedIn', { ao: ao?.name ?? checkIn.aoId })}</p>
+          {#if checkIn.primary}
+            <p class="dim">{t('cas.primary', { jtac: callsignOf(slices, checkIn.primary) })}</p>
+          {/if}
+        {:else}
+          <p class="state">{t('brief.notCheckedIn')}</p>
+          <p class="dim">{t('pilot.checkInHint')}</p>
+        {/if}
+
+        {#if ao}
+          <h4>{t('station.jtacs')}</h4>
+          <ul class="list">
+            {#each ao.jtacs as j (j.pid)}
+              <li>
+                <span class="who">{j.callsign}</span>
+                {#if ao.inCommand === j.pid}<span class="dim">{t('station.inCommand')}</span>{/if}
+                {#if j.presence === 'lost'}<span class="amber">{t('flight.lost')}</span>{/if}
+                <span class="mono freqs">
+                  {j.freqs
+                    .map((f) => `${f.mhz.toFixed(3)}${f.label ? ` ${f.label}` : ''}`)
+                    .join(' · ') || t('value.none')}
+                </span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
+        <h4>{t('pilot.members')}</h4>
+        <ul class="list">
+          {#each members as m (m.pid)}
+            {@const code =
+              checkIn?.brief.laserCodes.perAircraft[m.pid] ?? checkIn?.brief.laserCodes.flight}
+            <li class:me={m.pid === slices.session.pid}>
+              <span class="who">{own.display}-{m.pos}</span>
+              <span>{m.aircraft?.type ? unitDisplayName(m.aircraft.type) : '—'}</span>
+              <span class="mono">{formatFuel(fuelOf(m.pid), fuelUnit(m.aircraft?.type))}</span>
+              {#if code}<span class="mono">{t('cas.code', { code })}</span>{/if}
+              {#if m.presence === 'lost'}<span class="amber">{t('flight.lost')}</span>{/if}
+              <span class="dim">{ageOf(m.pid)}</span>
+            </li>
+          {/each}
+        </ul>
+
+        {#each calls as c, i (i)}
+          <p class="call {c.call}">
+            {c.callsign}
+            {c.call.toUpperCase()} · {formatFuel(
+              c.internalKg,
+              fuelUnit(slices.ownship.aircraft?.type),
+            )}
+          </p>
+        {/each}
+      </Card>
+    </Fold>
 
     {#if others.length > 0}
       <h4>{t('pilot.others')}</h4>

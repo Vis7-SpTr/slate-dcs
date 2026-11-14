@@ -211,53 +211,6 @@
                 />
               </label>
               <label class="field">
-                <span>{t('cas.abortCode')}</span>
-                <input
-                  class="mono"
-                  maxlength="12"
-                  bind:value={abortCode}
-                  onchange={() => {
-                    save({ abortCode: abortCode.trim() || null });
-                  }}
-                />
-              </label>
-            </div>
-            <label class="field">
-              <span>{t('cas.missionNumber')}</span>
-              <input
-                class="mono"
-                maxlength="16"
-                bind:value={missionNumber}
-                onchange={() => {
-                  save({ missionNumber: missionNumber.trim() || null });
-                }}
-              />
-            </label>
-            <div class="field">
-              <span>{t('cas.capabilities')}</span>
-              <div class="choice caps" role="group" aria-label={t('cas.capabilities')}>
-                {#each CAPS as cap (cap)}
-                  {@const on = brief.capabilities.includes(cap)}
-                  <button
-                    type="button"
-                    class="btn"
-                    class:selected={on}
-                    aria-pressed={on}
-                    disabled={busy}
-                    onclick={() => {
-                      save({
-                        capabilities: on
-                          ? brief.capabilities.filter((c) => c !== cap)
-                          : [...brief.capabilities, cap],
-                      });
-                    }}>{t(`cap.${cap}`)}</button
-                  >
-                {/each}
-              </div>
-            </div>
-            <fieldset class="codes">
-              <legend>{t('brief.laserCodes')}</legend>
-              <label class="field">
                 <span>{t('brief.flightCode')}</span>
                 <input
                   class="mono"
@@ -267,34 +220,89 @@
                   onchange={saveCodes}
                 />
               </label>
-              {#each brief.aircraft as a (a.pid)}
+            </div>
+            {#if badCodes}<p class="note amber">{t('brief.badCode')}</p>{/if}
+            <!-- The rest folds away: set once, kept by the host for the next check-in. -->
+            <details class="more">
+              <summary>{t('brief.more')}</summary>
+              <div class="form-grid">
+                <div class="two">
+                  <label class="field">
+                    <span>{t('cas.abortCode')}</span>
+                    <input
+                      class="mono"
+                      maxlength="12"
+                      bind:value={abortCode}
+                      onchange={() => {
+                        save({ abortCode: abortCode.trim() || null });
+                      }}
+                    />
+                  </label>
+                </div>
                 <label class="field">
-                  <span>{t('brief.ownCode', { who: callsignOf(slices, a.pid) })}</span>
+                  <span>{t('cas.missionNumber')}</span>
                   <input
                     class="mono"
-                    inputmode="numeric"
-                    maxlength="4"
-                    placeholder={t('brief.ownCode.placeholder')}
-                    value={ownCodes[a.pid] ?? ''}
-                    oninput={(event) => {
-                      ownCodes = { ...ownCodes, [a.pid]: event.currentTarget.value };
+                    maxlength="16"
+                    bind:value={missionNumber}
+                    onchange={() => {
+                      save({ missionNumber: missionNumber.trim() || null });
                     }}
-                    onchange={saveCodes}
                   />
                 </label>
-              {/each}
-              {#if badCodes}<p class="note amber">{t('brief.badCode')}</p>{/if}
-            </fieldset>
-            <label class="field">
-              <span>{t('brief.remarks')}</span>
-              <textarea
-                rows="2"
-                maxlength="500"
-                bind:value={remarks}
-                onchange={() => {
-                  save({ remarks: remarks.trim() });
-                }}></textarea>
-            </label>
+                <div class="field">
+                  <span>{t('cas.capabilities')}</span>
+                  <div class="choice caps" role="group" aria-label={t('cas.capabilities')}>
+                    {#each CAPS as cap (cap)}
+                      {@const on = brief.capabilities.includes(cap)}
+                      <button
+                        type="button"
+                        class="btn"
+                        class:selected={on}
+                        aria-pressed={on}
+                        disabled={busy}
+                        onclick={() => {
+                          save({
+                            capabilities: on
+                              ? brief.capabilities.filter((c) => c !== cap)
+                              : [...brief.capabilities, cap],
+                          });
+                        }}>{t(`cap.${cap}`)}</button
+                      >
+                    {/each}
+                  </div>
+                </div>
+                <fieldset class="codes">
+                  <legend>{t('brief.ownCodes')}</legend>
+                  {#each brief.aircraft as a (a.pid)}
+                    <label class="field">
+                      <span>{t('brief.ownCode', { who: callsignOf(slices, a.pid) })}</span>
+                      <input
+                        class="mono"
+                        inputmode="numeric"
+                        maxlength="4"
+                        placeholder={t('brief.ownCode.placeholder')}
+                        value={ownCodes[a.pid] ?? ''}
+                        oninput={(event) => {
+                          ownCodes = { ...ownCodes, [a.pid]: event.currentTarget.value };
+                        }}
+                        onchange={saveCodes}
+                      />
+                    </label>
+                  {/each}
+                </fieldset>
+                <label class="field">
+                  <span>{t('brief.remarks')}</span>
+                  <textarea
+                    rows="2"
+                    maxlength="500"
+                    bind:value={remarks}
+                    onchange={() => {
+                      save({ remarks: remarks.trim() });
+                    }}></textarea>
+                </label>
+              </div>
+            </details>
           </div>
         {:else}
           <div class="rows">
@@ -486,6 +494,24 @@
     gap: 0.5rem;
   }
 
+  .more {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 0 0.6rem;
+  }
+
+  .more[open] {
+    padding-bottom: 0.6rem;
+  }
+
+  .more summary {
+    display: flex;
+    align-items: center;
+    min-height: var(--touch);
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+
   .caps .btn {
     flex: 1 1 6rem;
   }
@@ -503,10 +529,6 @@
   .codes legend {
     color: var(--text-dim);
     font-size: 0.8125rem;
-  }
-
-  .codes .note {
-    grid-column: 1 / -1;
   }
 
   .targets {

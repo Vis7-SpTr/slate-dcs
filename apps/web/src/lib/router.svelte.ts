@@ -16,6 +16,19 @@ export type SubTabId<P extends PageId = PageId> = (typeof PAGES)[P][number];
 
 export const PAGE_IDS = Object.keys(PAGES) as PageId[];
 
+/**
+ * The sub-tabs a role sees (workflow compression): a pilot's CAS is one page,
+ * so he has no separate Fire missions tab and checks in there, not on
+ * Ownship. The hidden routes still work when opened directly.
+ */
+export function subTabsFor(page: PageId, role: string | null): readonly SubTabId[] {
+  const all: readonly SubTabId[] = PAGES[page];
+  if (role === 'jtac') return all;
+  if (page === 'cas') return all.filter((id) => id !== 'missions');
+  if (page === 'ownship') return all.filter((id) => id !== 'checkIn');
+  return all;
+}
+
 /** Pages whose sub-tab row holds page controls, not tabs (ui-design.md §2). */
 export const CONTROL_ROW_PAGES: readonly PageId[] = ['map'];
 
@@ -57,3 +70,10 @@ class Router {
 }
 
 export const router = new Router();
+
+/** Text key of a sub-tab: a pilot's CAS is one page under either CAS route. */
+export function subTabKey(page: PageId, sub: SubTabId, role: string | null): string {
+  return page === 'cas' && sub !== 'other' && role !== 'jtac'
+    ? 'sub.cas.pilot'
+    : `sub.${page}.${sub}`;
+}

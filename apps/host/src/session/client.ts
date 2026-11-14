@@ -402,6 +402,13 @@ export class RelayClient {
         if (sent.outcome.ok) this.#cas.copied(note.id);
         return sent.outcome;
       }
+      case 'cas.hold.wilco': {
+        const sent = await this.#casSend(joined, 'cas.hold.wilco', command.args, {
+          scope: 'relay',
+        });
+        if (sent.outcome.ok) this.#cas.wilcoed(command.args.holdId, joined.pid);
+        return sent.outcome;
+      }
       case 'fuel.call': {
         // Never automatic (§6.5): the pilot pressed it; the host adds his internal fuel.
         const internalKg = this.#fuel.internalKg();
@@ -892,6 +899,10 @@ export class RelayClient {
         return;
       }
       default: {
+        // Check-in and check-out change who gets the full status: send one at once (§6.3).
+        if (message.type === 'cas.checkedIn' || message.type === 'cas.checkedOut') {
+          this.#lastSent = null;
+        }
         const me = this.#me();
         if (me && this.#cas.apply(message, me, (pid) => this.#callsign(pid))) {
           this.#logCopy.changed(() => this.#logScope());

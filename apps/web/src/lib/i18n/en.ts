@@ -29,6 +29,7 @@ export const en = {
   'sub.ownship.flight': 'Flight',
   'sub.ownship.checkIn': 'Check-in',
   'sub.cas.flights': 'Flights',
+  'sub.cas.pilot': 'CAS',
   'sub.cas.missions': 'Fire missions',
   'sub.cas.other': 'Other',
   'sub.checklist.normal': 'Normal',
@@ -79,8 +80,6 @@ export const en = {
   'soon.efb.text': 'Airfields, frequencies and the mission data card come in P3/P4.',
   'soon.dtc.title': 'DTC editor',
   'soon.dtc.text': 'Reading and writing .dtc files comes in P5.',
-  'soon.log.title': 'CAS log',
-  'soon.log.text': 'The CAS log and its export come in P2.',
 
   // Ownship → Aircraft (ui-design.md §8)
   'aircraft.title': 'Aircraft',

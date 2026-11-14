@@ -274,6 +274,10 @@ describe('CAS through the host (P2.5)', () => {
     expect(checkIn?.brief.callsign).toBe('ENFIELD ONE');
     expect(checkIn?.brief.position?.lat).toBe(42.25);
     await until(() => wing.store.get('cas').checkIns.length === 1);
+    // Checked in: both aircraft send their status at once, not at the next heartbeat (§6.3).
+    const fullStatus = () => jtac.store.get('flight').status.map((s) => s.pid);
+    await pump([lead, wing]);
+    await until(() => [pid(lead), pid(wing)].every((p) => fullStatus().includes(p)));
 
     // --- A Type 2 mission, assigned to the flight -----------------------------
     await ok(jtac, { cmd: 'fm.create', args: { ...content(), aoId } });
@@ -372,6 +376,18 @@ describe('CAS through the host (P2.5)', () => {
     await until(() =>
       jtac.store.get('cas').holdWilcos.some((w) => w.holdId === holdId && w.pid === pid(lead)),
     );
+    // The pilot's own host keeps his WILCO, so his screens stop asking.
+    expect(lead.store.get('cas').holdWilcos).toMatchObject([{ holdId, pid: pid(lead) }]);
+    // A changed hold needs a new WILCO on both sides.
+    const held = jtac.store.get('cas').holds[0];
+    if (!held) throw new Error('no hold');
+    const { holdId: _id, aoId: _ao, conflicts: _conflicts, ...hold } = held;
+    await ok(jtac, { cmd: 'cas.hold.update', args: { holdId, hold: { ...hold, radiusM: 7408 } } });
+    for (const h of [lead, jtac]) {
+      await until(() => h.store.get('cas').holds[0]?.radiusM === 7408);
+      expect(h.store.get('cas').holdWilcos).toEqual([]);
+    }
+    await ok(lead, { cmd: 'cas.hold.wilco', args: { holdId } });
 
     await ok(wing, { cmd: 'fuel.call', args: { call: 'bingo' } });
     for (const h of [lead, jtac]) {

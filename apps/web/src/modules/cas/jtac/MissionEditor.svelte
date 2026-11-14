@@ -25,6 +25,7 @@
   import {
     callsignOf,
     casWho,
+    flightName,
     mtimeText,
     parseMissionTime,
     positionText,
@@ -32,16 +33,19 @@
   import { clock } from '../../../lib/clock.svelte.js';
   import { host } from '../../../lib/host.svelte.js';
   import { t } from '../../../lib/i18n/index.js';
-  import { emptyContent } from '../../../lib/missions.js';
+  import { canSendBrief, emptyContent, targetFromEntry } from '../../../lib/missions.js';
 
   const {
     aoId,
     mission = null,
+    flightId = null,
     onclose,
     onsaved = () => undefined,
   }: {
     aoId: string;
     mission?: FireMission | null;
+    /** A new mission for this flight: SEND BRIEF creates, assigns and briefs it. */
+    flightId?: string | null;
     onclose: () => void;
     onsaved?: () => void;
   } = $props();
@@ -185,23 +189,70 @@
   const pending = $derived(host.pendingOf(command));
   const busy = $derived(pending?.state === 'pending');
   let sent = $state(false);
+  /** Create, then assign and brief: the missions known before, to spot the new one. */
+  let thenBrief: { known: string[]; flightId: string } | null = $state(null);
   $effect(() => {
     // Close once the relay has taken it: no longer pending, and not failed.
     const done = command !== null && pending === undefined;
     const failed = host.view.lastFailure?.id === command;
-    if (sent && done && !failed) {
+    if (failed) thenBrief = null;
+    if (sent && done && !failed && thenBrief === null) {
       sent = false;
       onsaved();
     }
   });
+  $effect(() => {
+    const next = thenBrief;
+    if (!next || !slices) return;
+    const made = slices.missions.missions.find(
+      (m) =>
+        m.aoId === aoId &&
+        m.owner === slices.session.pid &&
+        m.state === 'draft' &&
+        !next.known.includes(m.missionId),
+    );
+    if (!made) return;
+    thenBrief = null;
+    sent = false;
+    const missionId = made.missionId;
+    host.sequence([
+      { cmd: 'fm.assign', args: { missionId, assignee: { flightId: next.flightId, pids: null } } },
+      { cmd: 'fm.brief', args: { missionId } },
+    ]);
+    onsaved();
+  });
 
-  function save(): void {
+  function save(brief = false): void {
     if (!parsed.success) return;
     sent = true;
-    command = mission
-      ? host.send({ cmd: 'fm.update', args: { ...parsed.data, missionId: mission.missionId } })
-      : host.send({ cmd: 'fm.create', args: { ...parsed.data, aoId } });
+    if (mission) {
+      command = host.send({
+        cmd: 'fm.update',
+        args: { ...parsed.data, missionId: mission.missionId },
+      });
+      return;
+    }
+    if (brief && flightId !== null && slices) {
+      thenBrief = { known: slices.missions.missions.map((m) => m.missionId), flightId };
+    }
+    command = host.send({ cmd: 'fm.create', args: { ...parsed.data, aoId } });
   }
+
+  const targets = $derived(
+    slices?.cas.mapEntries.filter(
+      (e) => (e.kind === 'enemy' || e.kind === 'threat') && targetFromEntry(e) !== null,
+    ) ?? [],
+  );
+  let targetId = $state('');
+  function pickTarget(): void {
+    const entry = targets.find((e) => e.cmId === targetId);
+    const target = entry ? targetFromEntry(entry) : null;
+    if (!target) return;
+    description = target.description;
+    location = target.location;
+    locationText = '';
+  }
+  const briefable = $derived(parsed.success && canSendBrief(parsed.data));
 
   const choice = <T,>(list: readonly T[]) => list;
 </script>
@@ -294,6 +345,18 @@
           <input class="mono" inputmode="numeric" bind:value={elevation} />
         </label>
       </div>
+      {#if targets.length > 0}
+        <label class="field">
+          <span>{t('fm.target')}</span>
+          <select bind:value={targetId} onchange={pickTarget}>
+            <option value="" disabled>{t('fm.target.pick')}</option>
+            {#each targets as e (e.cmId)}
+              <option value={e.cmId}>{t(`cm.${e.kind}`)} {e.label ?? e.text ?? ''}</option>
+            {/each}
+          </select>
+        </label>
+        <p class="note">{t('fm.target.note')}</p>
+      {/if}
       <label class="field">
         <span>{t('nine.5.input')}</span>
         <input bind:value={description} maxlength="200" placeholder="2x BMP-2 in treeline" />
@@ -424,12 +487,26 @@
     {#if problem}<p class="note amber">{problem}</p>{/if}
     <div class="actions">
       <button type="button" class="btn" onclick={onclose}>{t('action.close')}</button>
-      <button
-        type="submit"
-        class="btn primary"
-        disabled={busy || !parsed.success || problem !== null}
-        >{mission ? t('fm.save') : t('fm.create')}</button
-      >
+      {#if !mission && flightId !== null}
+        <button
+          type="button"
+          class="btn primary"
+          disabled={busy || !briefable || problem !== null}
+          onclick={() => {
+            save(true);
+          }}>{t('fm.sendBriefTo', { flight: flightName(slices, flightId) })}</button
+        >
+        <button type="submit" class="btn" disabled={busy || !parsed.success || problem !== null}
+          >{t('fm.saveDraft')}</button
+        >
+      {:else}
+        <button
+          type="submit"
+          class="btn primary"
+          disabled={busy || !parsed.success || problem !== null}
+          >{mission ? t('fm.save') : t('fm.create')}</button
+        >
+      {/if}
     </div>
     <CommandStatus id={command} />
   </form>

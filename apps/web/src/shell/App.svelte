@@ -8,7 +8,7 @@
   import { host } from '../lib/host.svelte.js';
   import { t } from '../lib/i18n/index.js';
   import type { MessageKey } from '../lib/i18n/index.js';
-  import { router } from '../lib/router.svelte.js';
+  import { router, subTabKey } from '../lib/router.svelte.js';
   import CasPage from '../modules/cas/CasPage.svelte';
   import ChecklistPage from '../modules/checklists/ChecklistPage.svelte';
   import MapPage from '../modules/map/MapPage.svelte';
@@ -30,7 +30,8 @@
     document.documentElement.style.setProperty('--ui-scale', String(scale));
   });
 
-  const title = $derived(page === 'map' ? null : t(`sub.${page}.${sub}` as MessageKey));
+  const role = $derived(host.view.slices?.session.role ?? null);
+  const title = $derived(page === 'map' ? null : t(subTabKey(page, sub, role) as MessageKey));
 </script>
 
 <div class="shell">

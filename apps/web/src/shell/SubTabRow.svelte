@@ -7,11 +7,14 @@
 <script lang="ts">
   import { t } from '../lib/i18n/index.js';
   import type { MessageKey } from '../lib/i18n/index.js';
-  import { CONTROL_ROW_PAGES, PAGES, router } from '../lib/router.svelte.js';
+  import { host } from '../lib/host.svelte.js';
+  import { CONTROL_ROW_PAGES, router, subTabKey, subTabsFor } from '../lib/router.svelte.js';
   import type { PageId, SubTabId } from '../lib/router.svelte.js';
 
   const { page, sub }: { page: PageId; sub: SubTabId } = $props();
-  const tabs = $derived(PAGES[page] as readonly SubTabId[]);
+  const role = $derived(host.view.slices?.session.role ?? null);
+  const tabs = $derived(subTabsFor(page, role));
+  const label = (id: SubTabId) => subTabKey(page, id, role) as MessageKey;
 </script>
 
 <div class="row">
@@ -29,7 +32,7 @@
             router.go(page, id);
           }}
         >
-          {t(`sub.${page}.${id}` as MessageKey)}
+          {t(label(id))}
         </button>
       {/each}
     </nav>

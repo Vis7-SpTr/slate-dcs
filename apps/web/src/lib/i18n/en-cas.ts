@@ -76,6 +76,8 @@ export const enCas = {
   'brief.ownCode.placeholder': 'flight code',
   'brief.badCode': 'A laser code is 1111–1788: 1st digit 1, 2nd 1–7, 3rd and 4th 1–8.',
   'brief.remarks': 'Remarks',
+  'brief.more': 'More: abort code, mission number, capabilities, own codes, remarks',
+  'brief.ownCodes': 'Own laser code per aircraft',
   'brief.sendTo': 'Send to',
   'brief.noAo': 'No JTAC is on-station in this session yet.',
   'brief.wholeAo': 'the AO – every JTAC working it',
@@ -100,7 +102,18 @@ export const enCas = {
   'alert.joker': 'JOKER – internal fuel reached your joker',
   'alert.bingo': 'BINGO – internal fuel reached your bingo',
   'alert.dismiss': 'Dismiss',
+  'todo.ack': '{id} CHANGED – check, then ACK',
+  'todo.wilco': 'HOLD assigned',
+  'todo.copy': 'SITUATION UPDATE from {from}',
+  'todo.copy.ao': 'to everyone in the AO',
+  'todo.copy.flight': 'to your flight',
+  'todo.bda': 'BDA {id}',
+  'todo.more': '+ {n} more on the CAS page',
   'alert.seen': 'Seen',
+
+  // The pilot's one CAS page (workflow compression)
+  'pilot.cas.brief': 'Check-in brief',
+  'pilot.cas.briefNote': 'update the brief · check out',
 
   // CAS → Flights for a pilot (P2.7)
   'pilot.checkInHint': 'Check in on Ownship → Check-in once you are established.',
@@ -108,6 +121,7 @@ export const enCas = {
   'pilot.sit': 'Situation update from {from}',
   'pilot.sitAll': 'Situation update to the AO from {from}',
   'pilot.copied': 'COPY sent',
+  'pilot.wilcoSent': 'WILCO sent',
   'pilot.others': 'Other flights in the AO',
 
   // CAS → Fire missions for a pilot (P2.7)
@@ -151,6 +165,8 @@ export const enCas = {
   'cas.playtime': '{min} min left',
   'cas.code': 'code {code}',
   'cas.noOrdnance': 'No ordnance reported',
+  'cas.codeShared': '(shared)',
+  'cas.missionsClosed': 'Closed missions',
   'cas.hold': 'Hold',
   'cas.coords': 'Coordinates',
   'cas.missions': 'Missions',
@@ -276,9 +292,9 @@ export const enCas = {
 
   // CAS → Other (D5)
   'other.ao': 'AO',
-  'other.holds': 'Holds',
+  'other.holds': 'Holding stack',
   'other.entries': 'Map entries',
-  'other.lasers': 'Lasers',
+  'other.lasers': 'Laser codes',
   'other.log': 'Log',
   'ao.none': 'No AO is active in this session.',
   'ao.edit': 'Change AO',
@@ -303,6 +319,8 @@ export const enCas = {
   'log.area.fuel': 'Fuel',
   'log.area.ao': 'AO',
   'log.none': 'Nothing logged yet.',
+  'log.export': 'Export {n} entries',
+  'log.csvSemicolon': 'CSV (;)',
 
   // CAS → Fire missions (JTAC, §10, P2.6b)
   'fm.new': 'New fire mission',
@@ -334,6 +352,22 @@ export const enCas = {
   'fm.readbackHint':
     'Take the readback on voice (lines 4, 6 and restrictions), then press READBACK CORRECT.',
   'fm.voiceOnly': 'Voice only',
+  'fm.copy': 'Copy mission',
+  'fm.details': '9-line, changes, command',
+  'fm.allBda': 'Every aircraft has its BDA – complete the mission.',
+  'fm.correlateAll': 'Correlated – all',
+  'fm.clearAll': 'Cleared hot – flight',
+  'fm.clearAll.conflict':
+    'would put more than one laser on a code ({who}). Tap twice to clear anyway.',
+  'fm.sendBrief': 'Send brief',
+  'fm.sendBriefTo': 'Send brief to {flight}',
+  'fm.assignOnly': 'Assign only',
+  'fm.sendBrief.need': 'Send brief needs line 6 – without it, assign only (game plan).',
+  'fm.newFor': 'New mission',
+  'fm.saveDraft': 'Save draft',
+  'fm.target': 'Target from a map entry',
+  'fm.target.pick': 'Pick an enemy or threat marker',
+  'fm.target.note': 'Fills lines 5 and 6. Line 4 (elevation) stays yours – markers have none.',
   'fm.offerTo': 'Offer command to',
   'fm.offerPick': 'Pick a JTAC',
   'fm.offer': 'Offer command',

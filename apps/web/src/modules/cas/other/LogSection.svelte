@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!--
-  Other → Log (D5, protocol.md §12): the live CAS log this user may see (the
-  host's copy, §14.8), newest first, by area. Export is in More → CAS log.
+  The live CAS log this user may see (protocol.md §12; the host's copy, §14.8),
+  newest first, by area. Shown in More → CAS log, above its export.
 -->
 <script lang="ts">
   import type { LogArea } from '@slate-dcs/shared';

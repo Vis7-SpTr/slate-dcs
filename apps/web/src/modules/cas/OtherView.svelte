@@ -1,19 +1,19 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!--
-  CAS → Other (ui-design.md §7, D5, P2.6): five sections – AO · Holds · Map
-  entries · Lasers · Log. Same page for every role; a JTAC gets the actions
-  (AO settings, recenter, situation update to the AO, holds, entries), a pilot
-  sees what the relay sent him. The section is screen-local state.
+  CAS → Other (ui-design.md §7): two sections – AO · Map entries. Under the AO,
+  the holding stack and the laser codes fold open (they also show on the
+  flight cards and lanes). The log is in More → CAS log. Same page for every
+  role; a JTAC gets the actions, a pilot sees what the relay sent him. The
+  section is screen-local state.
 -->
 <script lang="ts">
   import AoSection from './other/AoSection.svelte';
   import EntriesSection from './other/EntriesSection.svelte';
   import HoldsSection from './other/HoldsSection.svelte';
   import LasersSection from './other/LasersSection.svelte';
-  import LogSection from './other/LogSection.svelte';
   import { t } from '../../lib/i18n/index.js';
 
-  const SECTIONS = ['ao', 'holds', 'entries', 'lasers', 'log'] as const;
+  const SECTIONS = ['ao', 'entries'] as const;
   let section: (typeof SECTIONS)[number] = $state('ao');
 </script>
 
@@ -34,14 +34,16 @@
   </div>
   {#if section === 'ao'}
     <AoSection />
-  {:else if section === 'holds'}
-    <HoldsSection />
-  {:else if section === 'entries'}
-    <EntriesSection />
-  {:else if section === 'lasers'}
-    <LasersSection />
+    <details>
+      <summary>{t('other.holds')}</summary>
+      <HoldsSection />
+    </details>
+    <details>
+      <summary>{t('other.lasers')}</summary>
+      <LasersSection />
+    </details>
   {:else}
-    <LogSection />
+    <EntriesSection />
   {/if}
 </div>
 
@@ -51,6 +53,25 @@
     gap: 0.75rem;
     max-width: 44rem;
     margin-inline: auto;
+  }
+
+  details {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 0 0.75rem;
+  }
+
+  details[open] {
+    padding-bottom: 0.75rem;
+  }
+
+  summary {
+    min-height: var(--touch);
+    display: flex;
+    align-items: center;
+    color: var(--text-dim);
+    font-weight: 700;
+    cursor: pointer;
   }
 
   .sections .btn {

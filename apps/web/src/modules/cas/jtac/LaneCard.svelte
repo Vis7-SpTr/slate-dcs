@@ -2,8 +2,8 @@
 <!--
   One aircraft's lane for the JTAC (ui-design.md §7, protocol.md §10.3,
   §10.6–§10.8): its phase, SPI with distance and bearing from line 6, the
-  laser it uses, warnings, runs and BDA. Buttons in three fixed slots – the
-  next step, the other choice, ABORT far right – so nothing moves between
+  laser it uses, warnings, runs and BDA. Buttons in four fixed slots – next
+  step, dry or BDA, re-attack, ABORT far right – so nothing moves between
   phases. A laser conflict is shown before clearing and makes the clearance
   tap-to-arm: flagged, never blocked.
 -->
@@ -98,8 +98,8 @@
 
   function sendBda(): void {
     if (!slices) return;
-    command = host.send({
-      cmd: 'fm.bda',
+    const bda = {
+      cmd: 'fm.bda' as const,
       args: {
         ...base,
         target: bdaTarget.trim(),
@@ -108,7 +108,12 @@
         mtime: missionTimeNow(slices, clock.now),
         remarks: bdaRemarks.trim(),
       },
-    });
+    };
+    // From a cleared lane: the attack is over and the BDA passed in one press.
+    command =
+      lane.state === 'cleared'
+        ? host.sequence([{ cmd: 'fm.waitingBda', args: base }, bda])
+        : host.send(bda);
     bdaOpen = false;
   }
 
@@ -274,6 +279,7 @@
     <div class="slots">
       {@render slot(slots.first)}
       {@render slot(slots.second)}
+      {@render slot(slots.third)}
       {#if slots.abort}
         <ConfirmButton
           label={t('lane.abort')}
@@ -394,9 +400,19 @@
 
   .slots {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.5rem;
     margin-top: 0.25rem;
+  }
+
+  .empty {
+    min-height: var(--touch);
+  }
+
+  @media (max-width: 30rem) {
+    .slots {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   .slots :global(button) {

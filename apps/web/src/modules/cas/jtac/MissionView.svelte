@@ -12,6 +12,7 @@
 
   import CommandStatus from '../../../components/CommandStatus.svelte';
   import ConfirmButton from '../../../components/ConfirmButton.svelte';
+  import Fold from '../../../components/Fold.svelte';
   import Ticks from '../../../components/Ticks.svelte';
   import {
     callsignOf,
@@ -25,11 +26,15 @@
   import { host } from '../../../lib/host.svelte.js';
   import { t } from '../../../lib/i18n/index.js';
   import {
+    clearable,
+    correlatable,
     fieldKey,
+    groupClearConflicts,
     missionRights,
     missionSlots,
     MISSION_STEP_TYPES,
     pendingAcks,
+    readyToComplete,
     stepReady,
     unackedChanges,
   } from '../../../lib/missions.js';
@@ -39,7 +44,12 @@
   import MissionEditor from './MissionEditor.svelte';
   import WindowForm from './WindowForm.svelte';
 
-  const { mission, onclose }: { mission: FireMission; onclose: () => void } = $props();
+  /** `compact`: inline on a flight card – no back button, the 9-line and command fold away. */
+  const {
+    mission,
+    onclose = () => undefined,
+    compact = false,
+  }: { mission: FireMission; onclose?: () => void; compact?: boolean } = $props();
 
   const slices = $derived(host.view.slices);
   const who = $derived(slices ? casWho(slices) : null);
@@ -64,6 +74,20 @@
   let command: string | null = $state(null);
   const busy = $derived(host.pendingOf(command)?.state === 'pending');
   const id = $derived({ missionId: mission.missionId });
+  const toCorrelate = $derived(correlatable(mission));
+  const toClear = $derived(clearable(mission));
+  const groupClash = $derived(slices ? groupClearConflicts(slices, mission, toClear) : []);
+
+  /** The same step for several aircraft, one after the other. */
+  function all(cmd: 'fm.correlated' | 'fm.clear', pids: string[]): void {
+    command = host.sequence(
+      pids.map((pid) =>
+        cmd === 'fm.clear'
+          ? { cmd, args: { ...id, pid, kind: 'hot' as const } }
+          : { cmd, args: { ...id, pid } },
+      ),
+    );
+  }
 
   function step(next: NonNullable<typeof slots.next>): void {
     if (next === 'assign') {
@@ -84,7 +108,9 @@
 {#if slices && who}
   <article class="mission">
     <header>
-      <button type="button" class="btn back" onclick={onclose}>{t('fm.back')}</button>
+      {#if !compact}
+        <button type="button" class="btn back" onclick={onclose}>{t('fm.back')}</button>
+      {/if}
       <h3 class="mono">{mission.missionId}</h3>
       <span class="state {mission.state}">{t(`fm.state.${mission.state}`)}</span>
       {#if mission.gamePlan}<span class="tag"
@@ -107,65 +133,66 @@
       · rev {mission.revision}
     </p>
 
-    <!-- Command (§10.2) -->
-    <div class="command">
-      {#if rights.offered}
-        <p class="note">{t('fm.offeredToYou', { who: callsignOf(slices, mission.owner) })}</p>
-        <button
-          type="button"
-          class="btn primary"
-          disabled={busy}
-          onclick={() => {
-            command = host.send({ cmd: 'fm.acceptCommand', args: id });
-          }}>{t('fm.accept')}</button
-        >
-      {/if}
-      {#if rights.owner && rights.inCommand && otherJtacs.length > 0}
-        {#if mission.commandOffer}
-          <p class="note">{t('fm.offered', { who: callsignOf(slices, mission.commandOffer) })}</p>
-        {:else}
-          <label class="field offer">
-            <span>{t('fm.offerTo')}</span>
-            <select bind:value={offerTo}>
-              <option value="" disabled>{t('fm.offerPick')}</option>
-              {#each otherJtacs as j (j.pid)}
-                <option value={j.pid}>{j.callsign}</option>
-              {/each}
-            </select>
-          </label>
+    {#if !compact}
+      <!-- Command (§10.2) -->
+      <div class="command">
+        {#if rights.offered}
+          <p class="note">{t('fm.offeredToYou', { who: callsignOf(slices, mission.owner) })}</p>
           <button
             type="button"
-            class="btn"
-            disabled={busy || offerTo === ''}
+            class="btn primary"
+            disabled={busy}
             onclick={() => {
-              command = host.send({ cmd: 'fm.offerCommand', args: { ...id, pid: offerTo } });
-            }}>{t('fm.offer')}</button
+              command = host.send({ cmd: 'fm.acceptCommand', args: id });
+            }}>{t('fm.accept')}</button
           >
         {/if}
-      {/if}
-      {#if rights.owner && !rights.inCommand && rights.open}
-        <ConfirmButton
-          label={t('fm.reclaim')}
-          disabled={busy}
-          onconfirm={() => {
-            command = host.send({ cmd: 'fm.reclaim', args: id });
-          }}
-        />
-      {/if}
-      {#if rights.inCommand && !rights.owner}
-        <ConfirmButton
-          label={t('fm.return')}
-          disabled={busy}
-          onconfirm={() => {
-            command = host.send({ cmd: 'fm.returnCommand', args: id });
-          }}
-        />
-      {/if}
-      {#if !rights.inCommand && !rights.owner && !rights.offered && rights.open}
-        <p class="note dim">{t('fm.notInCommand')}</p>
-      {/if}
-    </div>
-
+        {#if rights.owner && rights.inCommand && otherJtacs.length > 0}
+          {#if mission.commandOffer}
+            <p class="note">{t('fm.offered', { who: callsignOf(slices, mission.commandOffer) })}</p>
+          {:else}
+            <label class="field offer">
+              <span>{t('fm.offerTo')}</span>
+              <select bind:value={offerTo}>
+                <option value="" disabled>{t('fm.offerPick')}</option>
+                {#each otherJtacs as j (j.pid)}
+                  <option value={j.pid}>{j.callsign}</option>
+                {/each}
+              </select>
+            </label>
+            <button
+              type="button"
+              class="btn"
+              disabled={busy || offerTo === ''}
+              onclick={() => {
+                command = host.send({ cmd: 'fm.offerCommand', args: { ...id, pid: offerTo } });
+              }}>{t('fm.offer')}</button
+            >
+          {/if}
+        {/if}
+        {#if rights.owner && !rights.inCommand && rights.open}
+          <ConfirmButton
+            label={t('fm.reclaim')}
+            disabled={busy}
+            onconfirm={() => {
+              command = host.send({ cmd: 'fm.reclaim', args: id });
+            }}
+          />
+        {/if}
+        {#if rights.inCommand && !rights.owner}
+          <ConfirmButton
+            label={t('fm.return')}
+            disabled={busy}
+            onconfirm={() => {
+              command = host.send({ cmd: 'fm.returnCommand', args: id });
+            }}
+          />
+        {/if}
+        {#if !rights.inCommand && !rights.owner && !rights.offered && rights.open}
+          <p class="note dim">{t('fm.notInCommand')}</p>
+        {/if}
+      </div>
+    {/if}
     <!-- The shared steps in fixed slots (§10.3) -->
     {#if rights.inCommand}
       <div class="slots">
@@ -179,7 +206,17 @@
         >
         {#if slots.next}
           {@const next = slots.next}
-          {#if next === 'complete'}
+          {#if next === 'complete' && readyToComplete(mission)}
+            <!-- Every aircraft has its BDA: offered with one press. -->
+            <button
+              type="button"
+              class="btn primary"
+              disabled={busy}
+              onclick={() => {
+                step(next);
+              }}>{t('fm.step.complete')}</button
+            >
+          {:else if next === 'complete'}
             <ConfirmButton
               label={t('fm.step.complete')}
               disabled={busy}
@@ -226,8 +263,26 @@
         <p class="note amber">{t('fm.needNineLine')}</p>
       {:else if mission.state === 'briefed'}
         <p class="note">{t('fm.readbackHint')}</p>
+      {:else if readyToComplete(mission)}
+        <p class="note ok">{t('fm.allBda')}</p>
       {/if}
       <div class="toggles">
+        <button
+          type="button"
+          class="btn"
+          disabled={busy}
+          onclick={() => {
+            command = host.send({
+              cmd: 'fm.create',
+              args: {
+                aoId: mission.aoId,
+                gamePlan: $state.snapshot(mission.gamePlan),
+                nineLine: $state.snapshot(mission.nineLine),
+                remarks: $state.snapshot(mission.remarks),
+              },
+            });
+          }}>{t('fm.copy')}</button
+        >
         <button
           type="button"
           class="btn"
@@ -334,36 +389,173 @@
       </section>
     {/if}
 
-    <!-- Changes after the brief (§10.5) -->
-    {#if mission.changes.length > 0}
-      <section class="changes">
-        <h4>{t('fm.changes')}</h4>
-        {#each mission.changes as c (c.rev)}
-          {@const waiting = pendingAcks(mission, c.rev)}
-          <p>
-            <span class="mono">rev {c.rev}</span>
-            {c.fields.map((f) => t(fieldKey(f))).join(', ')} –
-            {#if waiting.length === 0}
-              <span class="ok">{t('fm.ackedAll')}</span>
-            {:else}
-              <span class="amber">
-                {t('fm.ackWaiting', { who: waiting.map((p) => callsignOf(slices, p)).join(', ') })}
-              </span>
-            {/if}
-          </p>
-        {/each}
-      </section>
-    {/if}
-
-    <NineLineView {mission} style={who.style} changed={unackedChanges(mission)} />
-
     {#if mission.lanes.length > 0}
       <section class="lanes">
         <h4>{t('fm.lanes')}</h4>
+        {#if rights.inCommand && (toCorrelate.length > 1 || toClear.length > 1)}
+          <!-- One press for the whole flight; each aircraft still gets its own step in the log. -->
+          <div class="group">
+            <!-- Two fixed slots: a second tap on CORRELATED – ALL never lands on a clearance. -->
+            {#if toCorrelate.length > 1}
+              <button
+                type="button"
+                class="btn primary"
+                disabled={busy}
+                onclick={() => {
+                  all('fm.correlated', toCorrelate);
+                }}>{t('fm.correlateAll')}</button
+              >
+            {:else}
+              <span class="empty" aria-hidden="true"></span>
+            {/if}
+            {#if toClear.length > 1 && groupClash.length > 0}
+              <ConfirmButton
+                label={t('fm.clearAll')}
+                disabled={busy}
+                onconfirm={() => {
+                  all('fm.clear', toClear);
+                }}
+              />
+            {:else if toClear.length > 1}
+              <button
+                type="button"
+                class="btn primary"
+                disabled={busy}
+                onclick={() => {
+                  all('fm.clear', toClear);
+                }}>{t('fm.clearAll')}</button
+              >
+            {:else}
+              <span class="empty" aria-hidden="true"></span>
+            {/if}
+          </div>
+          {#if toClear.length > 1 && groupClash.length > 0}
+            <p class="note amber">
+              <strong>{t('warning.laserConflict')}</strong>
+              {t('fm.clearAll.conflict', {
+                who: groupClash.map((x) => callsignOf(slices, x.pid)).join(', '),
+              })}
+            </p>
+          {/if}
+        {/if}
         {#each mission.lanes as lane (lane.pid)}
           <LaneCard {mission} {lane} {rights} />
         {/each}
       </section>
+    {/if}
+    {#if compact}
+      <Fold title={t('fm.details')} note={mission.nineLine?.description ?? ''}>
+        <!-- Command (§10.2) -->
+        <div class="command">
+          {#if rights.offered}
+            <p class="note">{t('fm.offeredToYou', { who: callsignOf(slices, mission.owner) })}</p>
+            <button
+              type="button"
+              class="btn primary"
+              disabled={busy}
+              onclick={() => {
+                command = host.send({ cmd: 'fm.acceptCommand', args: id });
+              }}>{t('fm.accept')}</button
+            >
+          {/if}
+          {#if rights.owner && rights.inCommand && otherJtacs.length > 0}
+            {#if mission.commandOffer}
+              <p class="note">
+                {t('fm.offered', { who: callsignOf(slices, mission.commandOffer) })}
+              </p>
+            {:else}
+              <label class="field offer">
+                <span>{t('fm.offerTo')}</span>
+                <select bind:value={offerTo}>
+                  <option value="" disabled>{t('fm.offerPick')}</option>
+                  {#each otherJtacs as j (j.pid)}
+                    <option value={j.pid}>{j.callsign}</option>
+                  {/each}
+                </select>
+              </label>
+              <button
+                type="button"
+                class="btn"
+                disabled={busy || offerTo === ''}
+                onclick={() => {
+                  command = host.send({ cmd: 'fm.offerCommand', args: { ...id, pid: offerTo } });
+                }}>{t('fm.offer')}</button
+              >
+            {/if}
+          {/if}
+          {#if rights.owner && !rights.inCommand && rights.open}
+            <ConfirmButton
+              label={t('fm.reclaim')}
+              disabled={busy}
+              onconfirm={() => {
+                command = host.send({ cmd: 'fm.reclaim', args: id });
+              }}
+            />
+          {/if}
+          {#if rights.inCommand && !rights.owner}
+            <ConfirmButton
+              label={t('fm.return')}
+              disabled={busy}
+              onconfirm={() => {
+                command = host.send({ cmd: 'fm.returnCommand', args: id });
+              }}
+            />
+          {/if}
+          {#if !rights.inCommand && !rights.owner && !rights.offered && rights.open}
+            <p class="note dim">{t('fm.notInCommand')}</p>
+          {/if}
+        </div>
+
+        <!-- Changes after the brief (§10.5) -->
+        {#if mission.changes.length > 0}
+          <section class="changes">
+            <h4>{t('fm.changes')}</h4>
+            {#each mission.changes as c (c.rev)}
+              {@const waiting = pendingAcks(mission, c.rev)}
+              <p>
+                <span class="mono">rev {c.rev}</span>
+                {c.fields.map((f) => t(fieldKey(f))).join(', ')} –
+                {#if waiting.length === 0}
+                  <span class="ok">{t('fm.ackedAll')}</span>
+                {:else}
+                  <span class="amber">
+                    {t('fm.ackWaiting', {
+                      who: waiting.map((p) => callsignOf(slices, p)).join(', '),
+                    })}
+                  </span>
+                {/if}
+              </p>
+            {/each}
+          </section>
+        {/if}
+
+        <NineLineView {mission} style={who.style} changed={unackedChanges(mission)} />
+      </Fold>
+    {:else}
+      <!-- Changes after the brief (§10.5) -->
+      {#if mission.changes.length > 0}
+        <section class="changes">
+          <h4>{t('fm.changes')}</h4>
+          {#each mission.changes as c (c.rev)}
+            {@const waiting = pendingAcks(mission, c.rev)}
+            <p>
+              <span class="mono">rev {c.rev}</span>
+              {c.fields.map((f) => t(fieldKey(f))).join(', ')} –
+              {#if waiting.length === 0}
+                <span class="ok">{t('fm.ackedAll')}</span>
+              {:else}
+                <span class="amber">
+                  {t('fm.ackWaiting', {
+                    who: waiting.map((p) => callsignOf(slices, p)).join(', '),
+                  })}
+                </span>
+              {/if}
+            </p>
+          {/each}
+        </section>
+      {/if}
+
+      <NineLineView {mission} style={who.style} changed={unackedChanges(mission)} />
     {/if}
   </article>
 {/if}
@@ -460,6 +652,18 @@
   .end {
     display: flex;
     justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  .group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .group :global(button) {
+    min-width: 0;
+    padding: 0 0.4rem;
   }
 
   .window,

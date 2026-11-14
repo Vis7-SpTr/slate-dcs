@@ -7,6 +7,7 @@
 <script lang="ts">
   import { parseCoordinates } from '@slate-dcs/shared';
   import type { CoordStyle, LatLon } from '@slate-dcs/shared';
+  import { untrack } from 'svelte';
 
   import { positionText } from '../lib/cas.js';
   import { t } from '../lib/i18n/index.js';
@@ -23,6 +24,16 @@
 
   let text = $state('');
   const parsed = $derived(text.trim() === '' ? null : parseCoordinates(text));
+
+  // A value set from outside (an existing mission, a picked map entry) shows as text.
+  $effect(() => {
+    const v = value;
+    untrack(() => {
+      if (v && (parsed?.lat !== v.lat || parsed.lon !== v.lon)) {
+        text = positionText(v, style)[0] ?? '';
+      }
+    });
+  });
 </script>
 
 <div class="field coord">

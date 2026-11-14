@@ -2,28 +2,48 @@
 <!--
   Assign a draft (protocol.md §10.1): to a flight checked in to the AO, as a
   whole (every member gets a lane, later joiners too) or to some of its
-  aircraft. Assigning passes the game plan.
+  aircraft. SEND BRIEF assigns and briefs in one press – game plan and 9-line
+  go together; ASSIGN ONLY passes the game plan alone.
 -->
 <script lang="ts">
   import type { FireMission } from '@slate-dcs/shared';
+  import { untrack } from 'svelte';
 
   import CommandStatus from '../../../components/CommandStatus.svelte';
   import { callsignOf } from '../../../lib/cas.js';
   import { host } from '../../../lib/host.svelte.js';
   import { t } from '../../../lib/i18n/index.js';
+  import { canSendBrief } from '../../../lib/missions.js';
 
-  const { mission, onclose }: { mission: FireMission; onclose: () => void } = $props();
+  const {
+    mission,
+    onclose,
+    flight = '',
+  }: { mission: FireMission; onclose: () => void; flight?: string } = $props();
 
   const slices = $derived(host.view.slices);
   const flights = $derived(slices?.cas.checkIns.filter((c) => c.aoId === mission.aoId) ?? []);
 
-  let flightId = $state('');
+  let flightId = $state(untrack(() => flight));
   let whole = $state(true);
   let pids: string[] = $state([]);
   const crew = $derived(flights.find((f) => f.flightId === flightId)?.brief.aircraft ?? []);
   const ready = $derived(flightId !== '' && (whole || pids.length > 0));
 
+  const briefable = $derived(canSendBrief(mission));
+
   let command: string | null = $state(null);
+
+  function send(brief: boolean): void {
+    const missionId = mission.missionId;
+    const assign = {
+      cmd: 'fm.assign' as const,
+      args: { missionId, assignee: { flightId, pids: whole ? null : pids } },
+    };
+    command = brief
+      ? host.sequence([assign, { cmd: 'fm.brief', args: { missionId } }])
+      : host.send(assign);
+  }
   const busy = $derived(host.pendingOf(command)?.state === 'pending');
 </script>
 
@@ -32,13 +52,7 @@
     class="form-grid assign"
     onsubmit={(event) => {
       event.preventDefault();
-      command = host.send({
-        cmd: 'fm.assign',
-        args: {
-          missionId: mission.missionId,
-          assignee: { flightId, pids: whole ? null : pids },
-        },
-      });
+      send(briefable);
     }}
   >
     {#if flights.length === 0}
@@ -91,9 +105,20 @@
         {/if}
       {/if}
     {/if}
+    {#if !briefable}<p class="note">{t('fm.sendBrief.need')}</p>{/if}
     <div class="actions">
       <button type="button" class="btn" onclick={onclose}>{t('action.close')}</button>
-      <button type="submit" class="btn primary" disabled={busy || !ready}>{t('fm.assign')}</button>
+      <button type="submit" class="btn primary" disabled={busy || !ready || !briefable}
+        >{t('fm.sendBrief')}</button
+      >
+      <button
+        type="button"
+        class="btn"
+        disabled={busy || !ready}
+        onclick={() => {
+          send(false);
+        }}>{t('fm.assignOnly')}</button
+      >
     </div>
     <CommandStatus id={command} />
   </form>
@@ -127,6 +152,7 @@
 
   .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
   }
 
