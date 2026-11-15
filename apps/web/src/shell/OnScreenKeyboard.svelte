@@ -143,11 +143,23 @@
             class:wide={key.kind === 'space' || (key.kind === 'text' && key.wide === true)}
             class:on={key.kind === 'toggle' && key.on}
             class:fn={key.kind !== 'text'}
+            class:back={key.kind === 'back'}
             disabled={key.kind === 'text' && key.disabled === true}
             aria-label={key.kind === 'back' ? t('osk.back') : undefined}
             onclick={() => {
               press(key);
-            }}>{label(key)}</button
+            }}
+            >{#if key.kind === 'back'}<svg
+                class="icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linejoin="round"
+                stroke-linecap="round"
+                ><path d="M21 5H9l-6 7 6 7h12z" /><path d="M12 9l6 6M18 9l-6 6" /></svg
+              >{:else}{label(key)}{/if}</button
           >
         {/each}
       </div>
@@ -163,6 +175,8 @@
     left: 0;
     z-index: 50;
     display: grid;
+    /* Never wider than the window: a long title is cut, not the keys. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.3rem;
     margin: 0 auto;
     padding: 0.5rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom));
@@ -174,7 +188,8 @@
   /* Only as big as needed: the keypads stay narrow, letters take the width. */
   .osk.digits,
   .osk.laser {
-    max-width: 22rem;
+    /* Narrower than the letters, but keys big enough to hit in VR (ui-design.md §11). */
+    max-width: 30rem;
     border-right: 1px solid var(--line);
     border-left: 1px solid var(--line);
     border-radius: var(--radius) var(--radius) 0 0;
@@ -197,9 +212,13 @@
 
   .what {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
     color: var(--text-dim);
     font-size: 0.8125rem;
     text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .row {
@@ -228,6 +247,20 @@
   .key.fn {
     background: var(--surface-3);
     font-size: 0.9375rem;
+  }
+
+  /* The keypads: a third taller keys and larger digits. */
+  .digits .key,
+  .laser .key {
+    min-height: calc(var(--touch) * 1.35);
+    font-size: 1.5rem;
+  }
+
+  /* Delete as an icon: the fonts have no clear ⌫ glyph. */
+  .icon {
+    width: 1.6em;
+    height: 1.6em;
+    vertical-align: middle;
   }
 
   .key.on {
