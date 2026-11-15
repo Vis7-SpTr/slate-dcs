@@ -15,10 +15,19 @@
   import ConfirmButton from '../../components/ConfirmButton.svelte';
   import CoordInput from '../../components/CoordInput.svelte';
   import FreqEditor from '../../components/FreqEditor.svelte';
+  import Picks from '../../components/Picks.svelte';
   import Row from '../../components/Row.svelte';
+  import Stepper from '../../components/Stepper.svelte';
   import { altText, areaText, casWho, positionText } from '../../lib/cas.js';
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
+  import {
+    JTAC_CALLSIGNS,
+    lastJtacCallsign,
+    rememberFrequencies,
+    rememberJtacCallsign,
+    withCallsignName,
+  } from '../../lib/picks.js';
 
   const slices = $derived(host.view.slices);
   const who = $derived(slices ? casWho(slices) : null);
@@ -29,7 +38,10 @@
   });
 
   let mode: 'new' | 'join' = $state('new');
-  let callsign = $state('');
+  let callsign = $state(lastJtacCallsign() ?? '');
+  /** The DCS JTAC callsigns (ui-design.md §11); a pick keeps the number typed. */
+  const callsignPicks = JTAC_CALLSIGNS.map((n) => ({ label: n, value: n }));
+  const callsignName = $derived(callsign.replace(/\s+[\d-]+\s*$/, ''));
   let freqs: Frequency[] = $state([]);
   let name = $state('');
   let radiusNm = $state(String(AO_RULES.defaultRadiusM / 1852));
@@ -49,6 +61,8 @@
 
   function goOnStation(): void {
     const base = { callsign: callsign.trim(), freqs };
+    rememberJtacCallsign(base.callsign);
+    rememberFrequencies(freqs);
     if (mode === 'join') {
       if (joinCode === null) return;
       command = host.send({ cmd: 'jtac.onStation', args: { ...base, joinCode } });
@@ -124,6 +138,14 @@
           <span>{t('station.callsign')}</span>
           <input bind:value={callsign} maxlength="24" placeholder="Axeman 11" />
         </label>
+        <Picks
+          items={callsignPicks}
+          label={t('station.callsignPicks')}
+          selected={callsignName}
+          onpick={(n) => {
+            callsign = withCallsignName(callsign, n);
+          }}
+        />
         <FreqEditor bind:value={freqs} />
         <div class="choice" role="group" aria-label={t('station.call')}>
           <button
@@ -154,6 +176,14 @@
             <span>{t('station.radius')}</span>
             <input class="mono" inputmode="decimal" bind:value={radiusNm} />
           </label>
+          <Stepper
+            bind:value={radiusNm}
+            step={1}
+            min={1}
+            max={100}
+            presets={[5, 10, 15, 20]}
+            label={t('station.radiusSteps')}
+          />
           <AltitudeInput bind:value={floor} label={t('station.floor')} />
           <AltitudeInput bind:value={ceiling} label={t('station.ceiling')} />
           <CoordInput

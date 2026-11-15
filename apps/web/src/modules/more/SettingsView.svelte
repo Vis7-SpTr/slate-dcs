@@ -12,6 +12,7 @@
   import AppCard from './AppCard.svelte';
   import LanCard from './LanCard.svelte';
   import OkbCard from './OkbCard.svelte';
+  import OskCard from './OskCard.svelte';
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
 
@@ -109,6 +110,7 @@
     </Card>
 
     <OkbCard />
+    <OskCard />
 
     <LanCard />
 

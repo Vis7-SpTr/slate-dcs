@@ -16,6 +16,7 @@
   import OwnshipPage from '../modules/ownship/OwnshipPage.svelte';
   import AlertBar from './AlertBar.svelte';
   import MainTabs from './MainTabs.svelte';
+  import OnScreenKeyboard from './OnScreenKeyboard.svelte';
   import StatusStrip from './StatusStrip.svelte';
   import SubTabRow from './SubTabRow.svelte';
 
@@ -59,6 +60,7 @@
   <div class="subtabs"><SubTabRow {page} {sub} /></div>
   <div class="tabs"><MainTabs {page} /></div>
 </div>
+<OnScreenKeyboard />
 
 <style>
   .shell {
@@ -94,7 +96,8 @@
     grid-area: content;
     min-height: 0;
     overflow-y: auto;
-    padding: 0.5rem 1rem 1rem;
+    /* Room for the on-screen keyboard, so the field stays visible above it (§11). */
+    padding: 0.5rem 1rem calc(1rem + var(--osk-height, 0px));
   }
 
   /* Host link down: keep the last values visible but clearly not live. */

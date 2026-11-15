@@ -19,10 +19,12 @@
   import CommandStatus from '../../components/CommandStatus.svelte';
   import ConfirmButton from '../../components/ConfirmButton.svelte';
   import EmptyState from '../../components/EmptyState.svelte';
+  import Picks from '../../components/Picks.svelte';
   import { clock } from '../../lib/clock.svelte.js';
   import { formatAge, formatFuel } from '../../lib/format.js';
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
+  import { FLIGHT_CALLSIGNS, unitCallsign } from '../../lib/picks.js';
   import { router } from '../../lib/router.svelte.js';
 
   const slices = $derived(host.view.slices);
@@ -34,6 +36,18 @@
   const myPos = $derived(own?.members.find((m) => m.pid === me)?.pos ?? null);
 
   let name = $state('');
+  /**
+   * Flight names to pick (ui-design.md §11): the callsign of his own DCS unit
+   * first, if it has one, then the DCS callsigns. Anything else is typed.
+   */
+  const namePicks = $derived.by(() => {
+    const own = unitCallsign(slices?.ownship.aircraft?.unit);
+    const list = own ? [own, ...FLIGHT_CALLSIGNS.filter((n) => n !== own)] : FLIGHT_CALLSIGNS;
+    return list.map((n) => ({
+      label: n === own ? t('flight.name.fromMission', { name: n }) : n,
+      value: n,
+    }));
+  });
   let open = $state(true);
   let code = $state('');
   const flightCode = $derived(normalizeFlightCode(code));
@@ -187,6 +201,14 @@
           <span>{t('flight.name')}</span>
           <input bind:value={name} maxlength="24" placeholder={t('flight.name.placeholder')} />
         </label>
+        <Picks
+          items={namePicks}
+          label={t('flight.namePicks')}
+          selected={name.trim()}
+          onpick={(n) => {
+            name = n;
+          }}
+        />
         <div class="choice" role="group" aria-label={t('flight.create')}>
           <button
             type="button"

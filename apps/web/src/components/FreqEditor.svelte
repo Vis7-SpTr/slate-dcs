@@ -1,10 +1,16 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- The JTAC's frequencies, typed by hand (D10): MHz + optional label, at most six. -->
+<!--
+  The JTAC's frequencies, typed by hand (D10): MHz + optional label, at most
+  six. In VR picked from the AO's JTAC frequencies and the ones used last on
+  this screen (ui-design.md §11).
+-->
 <script lang="ts">
   import { MAX_FREQUENCIES } from '@slate-dcs/shared';
   import type { Frequency } from '@slate-dcs/shared';
 
+  import { host } from '../lib/host.svelte.js';
   import { t } from '../lib/i18n/index.js';
+  import { frequencyPicks, recentFrequencies } from '../lib/picks.js';
 
   let { value = $bindable() }: { value: Frequency[] } = $props();
 
@@ -13,6 +19,14 @@
   const number = $derived(Number(mhz.replace(',', '.')));
   const valid = $derived(
     mhz.trim() !== '' && Number.isFinite(number) && number >= 1 && number <= 1000,
+  );
+  const recent = recentFrequencies();
+  /** The AO's JTAC frequencies and the recent ones, not already in the list. */
+  const picks = $derived(
+    frequencyPicks([
+      (host.view.slices?.cas.aos ?? []).flatMap((ao) => ao.jtacs.flatMap((j) => j.freqs)),
+      recent,
+    ]).filter((f) => !value.some((v) => v.mhz.toFixed(3) === f.mhz.toFixed(3))),
   );
 </script>
 
@@ -36,6 +50,19 @@
     </ul>
   {/if}
   {#if value.length < MAX_FREQUENCIES}
+    {#if picks.length > 0}
+      <div class="picks" role="group" aria-label={t('freq.picks')}>
+        {#each picks as f (f.mhz)}
+          <button
+            type="button"
+            class="chip mono"
+            onclick={() => {
+              value = [...value, f];
+            }}>{f.mhz.toFixed(3)}{f.label ? ` ${f.label}` : ''}</button
+          >
+        {/each}
+      </div>
+    {/if}
     <div class="add">
       <input class="mono" inputmode="decimal" bind:value={mhz} placeholder="251.000" />
       <input bind:value={label} maxlength="24" placeholder={t('freq.label')} />

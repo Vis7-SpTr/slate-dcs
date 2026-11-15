@@ -10,6 +10,7 @@
   import { untrack } from 'svelte';
 
   import CommandStatus from '../../../components/CommandStatus.svelte';
+  import ChoiceChips from '../../../components/ChoiceChips.svelte';
   import { callsignOf } from '../../../lib/cas.js';
   import { host } from '../../../lib/host.svelte.js';
   import { t } from '../../../lib/i18n/index.js';
@@ -58,20 +59,14 @@
     {#if flights.length === 0}
       <p class="note amber">{t('assign.noFlights')}</p>
     {:else}
-      <label class="field">
-        <span>{t('assign.flight')}</span>
-        <select
-          bind:value={flightId}
-          onchange={() => {
-            pids = [];
-          }}
-        >
-          <option value="" disabled>{t('hold.flight.pick')}</option>
-          {#each flights as f (f.flightId)}
-            <option value={f.flightId}>{f.brief.callsign}</option>
-          {/each}
-        </select>
-      </label>
+      <ChoiceChips
+        bind:value={flightId}
+        label={t('assign.flight')}
+        options={flights.map((f) => ({ value: f.flightId, label: f.brief.callsign }))}
+        onchange={() => {
+          pids = [];
+        }}
+      />
       {#if flightId !== ''}
         <div class="choice" role="group" aria-label={t('assign.flight')}>
           <button

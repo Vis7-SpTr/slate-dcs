@@ -65,24 +65,6 @@
     font-size: 0.8125rem;
   }
 
-  .chip {
-    min-height: 2.25rem;
-    padding: 0 0.7rem;
-    border: 1px solid var(--line);
-    border-radius: 1rem;
-    background: var(--surface-2);
-    color: var(--text);
-    font: inherit;
-    font-size: 0.875rem;
-    cursor: pointer;
-  }
-
-  .chip.selected {
-    border-color: var(--blue);
-    background: var(--surface-3);
-    font-weight: 700;
-  }
-
   .none {
     margin: 0;
     color: var(--text-dim);

@@ -15,17 +15,22 @@
   import Card from '../../components/Card.svelte';
   import CommandStatus from '../../components/CommandStatus.svelte';
   import ConfirmButton from '../../components/ConfirmButton.svelte';
+  import Picks from '../../components/Picks.svelte';
+  import Stepper from '../../components/Stepper.svelte';
+  import TextChips from '../../components/TextChips.svelte';
   import Ticks from '../../components/Ticks.svelte';
   import {
     callsignOf,
     casWho,
     checkInOf,
+    laserUses,
     latestDelivery,
     positionText,
     tickLevel,
   } from '../../lib/cas.js';
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
+  import { TEXT_CHIPS } from '../../lib/picks.js';
 
   const slices = $derived(host.view.slices);
   const who = $derived(slices ? casWho(slices) : null);
@@ -77,6 +82,23 @@
   function save(changes: Partial<CheckInBrief>, reset: BriefField[] = []): void {
     command = host.send({ cmd: 'cas.setBrief', args: { changes, reset } });
   }
+
+  function savePlaytime(): void {
+    const n = Number(playtime);
+    if (playtime.trim() === '') save({ playtimeMin: null });
+    else if (Number.isInteger(n) && n >= 0) save({ playtimeMin: n });
+  }
+
+  /**
+   * Laser codes to pick (ui-design.md §11): DCS's default 1688 and the codes
+   * already in use in the AO.
+   */
+  const codePicks = $derived(
+    [...new Set([1688, ...(slices ? laserUses(slices).map((u) => u.code) : [])])].map((c) => ({
+      label: String(c),
+      value: String(c),
+    })),
+  );
 
   function saveCodes(): void {
     if (badCodes) return;
@@ -203,11 +225,14 @@
                   class="mono"
                   inputmode="numeric"
                   bind:value={playtime}
-                  onchange={() => {
-                    const n = Number(playtime);
-                    if (playtime.trim() === '') save({ playtimeMin: null });
-                    else if (Number.isInteger(n) && n >= 0) save({ playtimeMin: n });
-                  }}
+                  onchange={savePlaytime}
+                />
+                <Stepper
+                  bind:value={playtime}
+                  step={5}
+                  presets={[15, 30, 45, 60]}
+                  label={t('brief.playtimeSteps')}
+                  onchange={savePlaytime}
                 />
               </label>
               <label class="field">
@@ -215,9 +240,19 @@
                 <input
                   class="mono"
                   inputmode="numeric"
+                  data-osk="laser"
                   maxlength="4"
                   bind:value={flightCode}
                   onchange={saveCodes}
+                />
+                <Picks
+                  items={codePicks}
+                  label={t('brief.codePicks')}
+                  selected={flightCode.trim()}
+                  onpick={(c) => {
+                    flightCode = c;
+                    saveCodes();
+                  }}
                 />
               </label>
             </div>
@@ -231,6 +266,7 @@
                     <span>{t('cas.abortCode')}</span>
                     <input
                       class="mono"
+                      data-osk="letters"
                       maxlength="12"
                       bind:value={abortCode}
                       onchange={() => {
@@ -243,6 +279,7 @@
                   <span>{t('cas.missionNumber')}</span>
                   <input
                     class="mono"
+                    data-osk="digits"
                     maxlength="16"
                     bind:value={missionNumber}
                     onchange={() => {
@@ -280,6 +317,7 @@
                       <input
                         class="mono"
                         inputmode="numeric"
+                        data-osk="laser"
                         maxlength="4"
                         placeholder={t('brief.ownCode.placeholder')}
                         value={ownCodes[a.pid] ?? ''}
@@ -301,6 +339,14 @@
                       save({ remarks: remarks.trim() });
                     }}></textarea>
                 </label>
+                <TextChips
+                  bind:value={remarks}
+                  chips={TEXT_CHIPS.checkIn}
+                  label={t('picks.remarks')}
+                  onchange={(v) => {
+                    save({ remarks: v.trim() });
+                  }}
+                />
               </div>
             </details>
           </div>

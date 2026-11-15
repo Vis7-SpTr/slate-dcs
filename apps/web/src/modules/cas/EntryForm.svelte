@@ -16,10 +16,13 @@
   import AltitudeInput from '../../components/AltitudeInput.svelte';
   import CommandStatus from '../../components/CommandStatus.svelte';
   import CoordInput from '../../components/CoordInput.svelte';
+  import Picks from '../../components/Picks.svelte';
+  import Stepper from '../../components/Stepper.svelte';
   import { casWho, missionTimeNow } from '../../lib/cas.js';
   import { clock } from '../../lib/clock.svelte.js';
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
+  import { autoEntryName, THREAT_TYPES } from '../../lib/picks.js';
 
   const {
     aoId,
@@ -49,6 +52,26 @@
     m === null || m === undefined ? d : String(Math.round((m / 1852) * 10) / 10);
   let kind = $state<CmKind>(start?.kind ?? 'ip');
   let label = $state(start?.label ?? '');
+  /**
+   * A new entry starts with an automatic name per kind (`IP 1`, `THREAT 3` –
+   * ui-design.md §11), so nothing has to be typed; a name typed over stays.
+   */
+  let autoName = '';
+  function nameFor(k: CmKind): void {
+    if (start) return;
+    const next = autoEntryName(k, host.view.slices?.cas.mapEntries ?? []);
+    if (label.trim() === '' || label === autoName) label = next;
+    autoName = next;
+  }
+  nameFor(untrack(() => kind));
+  // The form stays open after ADD: once the new entry arrives, the next name follows.
+  $effect(() => {
+    const count = host.view.slices?.cas.mapEntries.length ?? 0;
+    untrack(() => {
+      if (count > 0) nameFor(kind);
+    });
+  });
+  const threatPicks = THREAT_TYPES.map((n) => ({ label: n, value: n }));
   let text = $state(start?.text ?? '');
   let at: LatLon | null = $state(
     startGeom === undefined ? null : 'center' in startGeom ? startGeom.center : startGeom,
@@ -128,6 +151,7 @@
             class:selected={kind === k}
             onclick={() => {
               kind = k;
+              nameFor(k);
             }}>{t(`cm.${k}`)}</button
           >
         {/each}
@@ -137,6 +161,16 @@
       <span>{t('entry.label')}</span>
       <input bind:value={label} maxlength="48" placeholder={t('entry.label.placeholder')} />
     </label>
+    {#if kind === 'threat'}
+      <Picks
+        items={threatPicks}
+        label={t('entry.threatPicks')}
+        selected={label}
+        onpick={(n) => {
+          label = n;
+        }}
+      />
+    {/if}
     <CoordInput
       bind:value={at}
       label={isCircle ? t('entry.center') : t('entry.position')}
@@ -168,18 +202,27 @@
         <span>{t('entry.radius')}</span>
         <input class="mono" inputmode="decimal" bind:value={radius} />
       </label>
+      <Stepper
+        bind:value={radius}
+        step={0.5}
+        min={0.1}
+        presets={[0.5, 1, 2]}
+        label={t('entry.radius')}
+      />
     {/if}
     {#if kind === 'threat'}
       <label class="field">
         <span>{t('entry.ring')}</span>
         <input class="mono" inputmode="decimal" bind:value={ring} placeholder="5" />
       </label>
+      <Stepper bind:value={ring} step={1} min={0} presets={[2, 3, 5, 10]} label={t('entry.ring')} />
     {/if}
     {#if kind === 'enemy'}
       <div class="two">
         <label class="field">
           <span>{t('entry.count')}</span>
           <input class="mono" inputmode="numeric" bind:value={count} />
+          <Stepper bind:value={count} step={1} min={1} label={t('entry.count')} />
         </label>
         <div class="choice" role="group" aria-label={t('entry.moving')}>
           <button

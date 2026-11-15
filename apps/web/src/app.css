@@ -161,6 +161,38 @@ p {
   flex: 1;
 }
 
+/* Picks (ui-design.md §11): values picked by click instead of typed – in VR
+   OpenKneeboard passes no keyboard. */
+.picks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.chip {
+  min-height: 2.25rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+/* `.chip` sets `font: inherit`; keep the mono face for numbers. */
+.chip.mono {
+  font-family: var(--mono);
+}
+
+.chip.selected {
+  border-color: var(--blue);
+  background: var(--surface-3);
+  font-weight: 700;
+}
+
 .note {
   color: var(--text-dim);
   font-size: 0.875rem;

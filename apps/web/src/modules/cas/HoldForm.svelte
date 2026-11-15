@@ -11,6 +11,9 @@
 
   import AltitudeInput from '../../components/AltitudeInput.svelte';
   import CommandStatus from '../../components/CommandStatus.svelte';
+  import Stepper from '../../components/Stepper.svelte';
+  import TimePicks from '../../components/TimePicks.svelte';
+  import ChoiceChips from '../../components/ChoiceChips.svelte';
   import PointInput from '../../components/PointInput.svelte';
   import { casWho, flightName, holdOverlaps, mtimeText, parseMissionTime } from '../../lib/cas.js';
   import { clock } from '../../lib/clock.svelte.js';
@@ -128,15 +131,11 @@
     }}
   >
     {#if fixedFlight === null && !hold}
-      <label class="field">
-        <span>{t('hold.flight')}</span>
-        <select bind:value={flightId}>
-          <option value="" disabled>{t('hold.flight.pick')}</option>
-          {#each flights as f (f.flightId)}
-            <option value={f.flightId}>{f.brief.callsign}</option>
-          {/each}
-        </select>
-      </label>
+      <ChoiceChips
+        bind:value={flightId}
+        label={t('hold.flight')}
+        options={flights.map((f) => ({ value: f.flightId, label: f.brief.callsign }))}
+      />
     {:else}
       <p class="to">{t('hold.for', { flight: flightName(slices, flightId) })}</p>
     {/if}
@@ -173,11 +172,27 @@
         <span>{t('hold.radius')}</span>
         <input class="mono" inputmode="decimal" bind:value={radius} />
       </label>
+      <Stepper
+        bind:value={radius}
+        step={0.5}
+        min={0.5}
+        max={20}
+        presets={[1, 2, 3]}
+        label={t('hold.radiusSteps')}
+      />
     {:else}
       <div class="two">
         <label class="field">
           <span>{t('hold.leg')}</span>
           <input class="mono" inputmode="decimal" bind:value={leg} />
+          <Stepper
+            bind:value={leg}
+            step={1}
+            min={1}
+            max={50}
+            presets={[5, 10]}
+            label={t('hold.legSteps')}
+          />
         </label>
         <label class="field">
           <span>{t('hold.inbound')}</span>
@@ -190,17 +205,21 @@
         <span>{t('hold.from')}</span>
         <input
           class="mono"
+          data-osk="digits"
           bind:value={fromText}
           placeholder={hold?.from ? mtimeText(slices, hold.from) : t('time.placeholder')}
         />
+        <TimePicks bind:value={fromText} label={t('hold.fromPicks')} />
       </label>
       <label class="field">
         <span>{t('hold.until')}</span>
         <input
           class="mono"
+          data-osk="digits"
           bind:value={untilText}
           placeholder={hold?.until ? mtimeText(slices, hold.until) : t('hold.open')}
         />
+        <TimePicks bind:value={untilText} label={t('hold.untilPicks')} offsets={[15, 30, 45, 60]} />
       </label>
     </div>
     {#if badTime}<p class="note amber">{t('time.bad')}</p>{/if}

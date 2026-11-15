@@ -14,6 +14,7 @@
   import ConfirmButton from '../../../components/ConfirmButton.svelte';
   import CoordInput from '../../../components/CoordInput.svelte';
   import LinkedList from '../../../components/LinkedList.svelte';
+  import Stepper from '../../../components/Stepper.svelte';
   import Ticks from '../../../components/Ticks.svelte';
   import {
     callsignOf,
@@ -59,6 +60,15 @@
   const ownPos = $derived.by((): LatLon | null => {
     const pos = slices?.ownship.status?.pos;
     return pos ? { lat: pos.lat, lon: pos.lon } : null;
+  });
+  /** Positions to pick for the SPI (ui-design.md §11): line 6, his last SPI. */
+  const spiPicks = $derived.by(() => {
+    const out: { label: string; pos: LatLon }[] = [];
+    const six = mission.nineLine?.location;
+    if (six) out.push({ label: t('coord.line6'), pos: { lat: six.lat, lon: six.lon } });
+    if (lane?.spi)
+      out.push({ label: t('coord.lastSpi'), pos: { lat: lane.spi.lat, lon: lane.spi.lon } });
+    return out;
   });
   let spi: LatLon | null = $state(null);
   let spiElevation = $state('');
@@ -224,11 +234,18 @@
           label={t('pilot.fm.spiInput')}
           style={who.style}
           own={ownPos}
+          picks={spiPicks}
         />
         <div class="spi-send">
           <label class="field">
             <span>{t('pilot.fm.spiElevation')}</span>
             <input class="mono" inputmode="numeric" bind:value={spiElevation} />
+            <Stepper
+              bind:value={spiElevation}
+              step={100}
+              label={t('pilot.fm.spiElevation')}
+              from={Math.round((mission.nineLine?.elevationM ?? 0) / 0.3048)}
+            />
           </label>
           <button type="button" class="btn" disabled={busy || spi === null} onclick={sendSpi}
             >{t('pilot.fm.sendSpi')}</button

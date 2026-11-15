@@ -1,9 +1,13 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- An altitude typed in feet with its reference (SFC, AGL, MSL); stored in metres (protocol.md §0). -->
+<!--
+  An altitude typed in feet with its reference (SFC, AGL, MSL); stored in
+  metres (protocol.md §0). ± 500 ft steps to pick it in VR (ui-design.md §11).
+-->
 <script lang="ts">
   import type { Altitude } from '@slate-dcs/shared';
 
   import { t } from '../lib/i18n/index.js';
+  import Stepper from './Stepper.svelte';
 
   // Svelte needs `let` for a bindable prop; the others are never reassigned.
   // eslint-disable-next-line prefer-const
@@ -44,6 +48,16 @@
       {/each}
     </div>
   </div>
+  {#if value.ref !== 'sfc'}
+    <Stepper
+      bind:value={feet}
+      step={500}
+      label={t('alt.steps', { label })}
+      onchange={(v) => {
+        set(value.ref, v);
+      }}
+    />
+  {/if}
 </div>
 
 <style>

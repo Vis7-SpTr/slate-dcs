@@ -11,6 +11,7 @@
   import type { FireMission } from '@slate-dcs/shared';
 
   import CommandStatus from '../../../components/CommandStatus.svelte';
+  import ChoiceChips from '../../../components/ChoiceChips.svelte';
   import ConfirmButton from '../../../components/ConfirmButton.svelte';
   import Fold from '../../../components/Fold.svelte';
   import LinkedList from '../../../components/LinkedList.svelte';
@@ -152,15 +153,11 @@
           {#if mission.commandOffer}
             <p class="note">{t('fm.offered', { who: callsignOf(slices, mission.commandOffer) })}</p>
           {:else}
-            <label class="field offer">
-              <span>{t('fm.offerTo')}</span>
-              <select bind:value={offerTo}>
-                <option value="" disabled>{t('fm.offerPick')}</option>
-                {#each otherJtacs as j (j.pid)}
-                  <option value={j.pid}>{j.callsign}</option>
-                {/each}
-              </select>
-            </label>
+            <ChoiceChips
+              bind:value={offerTo}
+              label={t('fm.offerTo')}
+              options={otherJtacs.map((j) => ({ value: j.pid, label: j.callsign }))}
+            />
             <button
               type="button"
               class="btn"
@@ -466,15 +463,11 @@
                 {t('fm.offered', { who: callsignOf(slices, mission.commandOffer) })}
               </p>
             {:else}
-              <label class="field offer">
-                <span>{t('fm.offerTo')}</span>
-                <select bind:value={offerTo}>
-                  <option value="" disabled>{t('fm.offerPick')}</option>
-                  {#each otherJtacs as j (j.pid)}
-                    <option value={j.pid}>{j.callsign}</option>
-                  {/each}
-                </select>
-              </label>
+              <ChoiceChips
+                bind:value={offerTo}
+                label={t('fm.offerTo')}
+                options={otherJtacs.map((j) => ({ value: j.pid, label: j.callsign }))}
+              />
               <button
                 type="button"
                 class="btn"

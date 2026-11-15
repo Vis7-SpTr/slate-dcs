@@ -20,13 +20,18 @@
   import { untrack } from 'svelte';
 
   import CommandStatus from '../../../components/CommandStatus.svelte';
+  import ChoiceChips from '../../../components/ChoiceChips.svelte';
   import CoordInput from '../../../components/CoordInput.svelte';
   import EntryLinks from '../../../components/EntryLinks.svelte';
+  import Picks from '../../../components/Picks.svelte';
   import PointInput from '../../../components/PointInput.svelte';
+  import TextChips from '../../../components/TextChips.svelte';
+  import TimePicks from '../../../components/TimePicks.svelte';
   import {
     callsignOf,
     casWho,
     flightName,
+    laserUses,
     mtimeText,
     parseMissionTime,
     positionText,
@@ -35,6 +40,7 @@
   import { host } from '../../../lib/host.svelte.js';
   import { t } from '../../../lib/i18n/index.js';
   import { canSendBrief, emptyContent, targetFromEntry } from '../../../lib/missions.js';
+  import { TEXT_CHIPS } from '../../../lib/picks.js';
 
   const {
     aoId,
@@ -114,6 +120,21 @@
   let restrictions = $state(rm.restrictions.join('\n'));
   let hazards = $state(rm.hazards);
   let remarksText = $state(rm.text);
+
+  /** Picks (ui-design.md §11): the flight's ordnance, laser codes in the AO. */
+  const ordnancePicks = $derived.by(() => {
+    const ids = flightId ?? mission?.assignee?.flightId ?? null;
+    const check = slices?.cas.checkIns.find((c) => c.flightId === ids);
+    return (check?.brief.ordnance ?? [])
+      .filter((o) => !o.name.startsWith('Gun'))
+      .map((o) => ({ label: o.name, value: o.name }));
+  });
+  const codePicks = $derived(
+    [...new Set([1688, ...(slices ? laserUses(slices).map((u) => u.code) : [])])].map((c) => ({
+      label: String(c),
+      value: String(c),
+    })),
+  );
 
   /** A typed number, `null` when empty, `NaN` when it isn't one. */
   const num = (s: string): number | null =>
@@ -302,10 +323,24 @@
         <span>{t('gp.effects')}</span>
         <input bind:value={effects} maxlength="100" placeholder={t('gp.effects.placeholder')} />
       </label>
+      <TextChips
+        bind:value={effects}
+        chips={TEXT_CHIPS.effects}
+        join="replace"
+        label={t('gp.effects')}
+      />
       <label class="field">
         <span>{t('gp.ordnance')}</span>
         <input bind:value={ordnance} maxlength="100" placeholder="GBU-12 x2" />
       </label>
+      <Picks
+        items={ordnancePicks}
+        label={t('gp.ordnancePicks')}
+        selected={ordnance}
+        onpick={(o) => {
+          ordnance = o;
+        }}
+      />
       <label class="field">
         <span>{t('gp.interval')}</span>
         <input bind:value={interval} maxlength="100" placeholder={t('gp.interval.placeholder')} />
@@ -348,15 +383,15 @@
         </label>
       </div>
       {#if targets.length > 0}
-        <label class="field">
-          <span>{t('fm.target')}</span>
-          <select bind:value={targetId} onchange={pickTarget}>
-            <option value="" disabled>{t('fm.target.pick')}</option>
-            {#each targets as e (e.cmId)}
-              <option value={e.cmId}>{t(`cm.${e.kind}`)} {e.label ?? e.text ?? ''}</option>
-            {/each}
-          </select>
-        </label>
+        <ChoiceChips
+          bind:value={targetId}
+          label={t('fm.target')}
+          options={targets.map((e) => ({
+            value: e.cmId,
+            label: `${t(`cm.${e.kind}`)} ${e.label ?? e.text ?? ''}`.trim(),
+          }))}
+          onchange={pickTarget}
+        />
         <p class="note">{t('fm.target.note')}</p>
       {/if}
       <label class="field">
@@ -406,20 +441,33 @@
           {/each}
         </div>
         {#if sourceKind !== 'ownship'}
-          <label class="field">
-            <span>{t('mark.who')}</span>
-            <select bind:value={sourcePid}>
-              <option value="" disabled>{t('mark.who.pick')}</option>
-              {#each sourceKind === 'jtac' ? ao.jtacs.map((j) => j.pid) : aircraft as pid (pid)}
-                <option value={pid}>{callsignOf(slices, pid)}</option>
-              {/each}
-            </select>
-          </label>
+          <ChoiceChips
+            bind:value={sourcePid}
+            label={t('mark.who')}
+            options={(sourceKind === 'jtac' ? ao.jtacs.map((j) => j.pid) : aircraft).map((pid) => ({
+              value: pid,
+              label: callsignOf(slices, pid),
+            }))}
+          />
           {#if markType === 'laser'}
             <label class="field">
               <span>{t('mark.code')}</span>
-              <input class="mono" inputmode="numeric" maxlength="4" bind:value={code} />
+              <input
+                class="mono"
+                inputmode="numeric"
+                data-osk="laser"
+                maxlength="4"
+                bind:value={code}
+              />
             </label>
+            <Picks
+              items={codePicks}
+              label={t('brief.codePicks')}
+              selected={code}
+              onpick={(c) => {
+                code = c;
+              }}
+            />
           {/if}
         {:else if markType === 'laser'}
           <p class="note">{t('mark.ownship.note')}</p>
@@ -436,11 +484,18 @@
         <span>{t('nine.8.input')}</span>
         <input bind:value={friendlies} maxlength="500" placeholder="South 800 m" />
       </label>
+      <TextChips bind:value={friendlies} chips={TEXT_CHIPS.friendlies} label={t('nine.8.input')} />
       <EntryLinks bind:value={friendlyLinks} kinds={['friendly']} label={t('links.friendlies')} />
       <label class="field">
         <span>{t('nine.9.input')}</span>
         <input bind:value={egress} maxlength="200" placeholder={t('nine.9.placeholder')} />
       </label>
+      <TextChips
+        bind:value={egress}
+        chips={TEXT_CHIPS.egress}
+        join="replace"
+        label={t('nine.9.input')}
+      />
     </fieldset>
 
     <fieldset>
@@ -454,9 +509,11 @@
           <span>{t('remarks.tot')}</span>
           <input
             class="mono"
+            data-osk="digits"
             bind:value={totText}
             placeholder={rm.tot === null ? t('time.placeholder') : mtimeText(slices, rm.tot)}
           />
+          <TimePicks bind:value={totText} label={t('remarks.tot')} offsets={[5, 10, 15, 20, 30]} />
         </label>
       </div>
       <div class="two">
@@ -477,14 +534,22 @@
         <span>{t('remarks.restrictions.input')} <span class="rb">RB</span></span>
         <textarea bind:value={restrictions} rows="2"></textarea>
       </label>
+      <TextChips
+        bind:value={restrictions}
+        chips={TEXT_CHIPS.restrictions}
+        join="line"
+        label={t('remarks.restrictions.input')}
+      />
       <label class="field">
         <span>{t('remarks.hazards')}</span>
         <input bind:value={hazards} maxlength="500" />
       </label>
+      <TextChips bind:value={hazards} chips={TEXT_CHIPS.hazards} label={t('remarks.hazards')} />
       <label class="field">
         <span>{t('remarks.text')}</span>
         <textarea bind:value={remarksText} maxlength="1000" rows="2"></textarea>
       </label>
+      <TextChips bind:value={remarksText} chips={TEXT_CHIPS.remarks} label={t('remarks.text')} />
     </fieldset>
 
     {#if problem}<p class="note amber">{problem}</p>{/if}

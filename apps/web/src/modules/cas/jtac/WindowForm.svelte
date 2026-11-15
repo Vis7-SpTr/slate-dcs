@@ -12,8 +12,12 @@
   import { untrack } from 'svelte';
 
   import CommandStatus from '../../../components/CommandStatus.svelte';
+  import ChoiceChips from '../../../components/ChoiceChips.svelte';
   import EntryLinks from '../../../components/EntryLinks.svelte';
   import PointInput from '../../../components/PointInput.svelte';
+  import Stepper from '../../../components/Stepper.svelte';
+  import TextChips from '../../../components/TextChips.svelte';
+  import TimePicks from '../../../components/TimePicks.svelte';
   import {
     callsignOf,
     casWho,
@@ -24,6 +28,7 @@
   import { clock } from '../../../lib/clock.svelte.js';
   import { host } from '../../../lib/host.svelte.js';
   import { t } from '../../../lib/i18n/index.js';
+  import { TEXT_CHIPS } from '../../../lib/picks.js';
 
   const { mission, onclose }: { mission: FireMission; onclose: () => void } = $props();
 
@@ -125,17 +130,21 @@
         <span>{t('window.from')}</span>
         <input
           class="mono"
+          data-osk="digits"
           bind:value={fromText}
           placeholder={now === null ? t('time.placeholder') : t('window.now')}
         />
+        <TimePicks bind:value={fromText} label={t('window.from')} offsets={[0, 5, 10]} />
       </label>
       <label class="field">
         <span>{t('window.until')}</span>
         <input
           class="mono"
+          data-osk="digits"
           bind:value={untilText}
           placeholder={until === null ? t('time.placeholder') : mtimeText(slices, until)}
         />
+        <TimePicks bind:value={untilText} label={t('window.until')} offsets={[10, 15, 20, 30]} />
       </label>
     </div>
     {#if untilText.trim() === ''}
@@ -143,6 +152,13 @@
         <span>{t('window.minutes')}</span>
         <input class="mono" inputmode="numeric" bind:value={minutes} />
       </label>
+      <Stepper
+        bind:value={minutes}
+        step={5}
+        min={1}
+        presets={[10, 15, 20, 30]}
+        label={t('window.minutes')}
+      />
     {/if}
     <div class="choice" role="group" aria-label={t('window.area')}>
       {#each ['ao', 'entry', 'circle'] as const as k (k)}
@@ -161,15 +177,14 @@
       {#if entries.length === 0}
         <p class="note amber">{t('window.noEntries')}</p>
       {:else}
-        <label class="field">
-          <span>{t('window.area.entry')}</span>
-          <select bind:value={cmId}>
-            <option value="" disabled>{t('point.pick')}</option>
-            {#each entries as e (e.cmId)}
-              <option value={e.cmId}>{t(`cm.${e.kind}`)} {e.label ?? ''}</option>
-            {/each}
-          </select>
-        </label>
+        <ChoiceChips
+          bind:value={cmId}
+          label={t('window.area.entry')}
+          options={entries.map((e) => ({
+            value: e.cmId,
+            label: `${t(`cm.${e.kind}`)} ${e.label ?? ''}`.trim(),
+          }))}
+        />
       {/if}
     {:else if areaKind === 'circle'}
       <PointInput
@@ -182,6 +197,13 @@
         <span>{t('window.radius')}</span>
         <input class="mono" inputmode="decimal" bind:value={radius} />
       </label>
+      <Stepper
+        bind:value={radius}
+        step={0.5}
+        min={0.5}
+        presets={[1, 2, 3]}
+        label={t('window.radius')}
+      />
     {/if}
     <label class="field">
       <span>{t('window.targets')}</span>
@@ -192,6 +214,12 @@
       <span>{t('window.restrictions')}</span>
       <textarea bind:value={restrictions} rows="2"></textarea>
     </label>
+    <TextChips
+      bind:value={restrictions}
+      chips={TEXT_CHIPS.restrictions}
+      join="line"
+      label={t('window.restrictions')}
+    />
     {#if !parsed.success && from !== null && until !== null}
       <p class="note amber">{parsed.error.issues[0]?.message}</p>
     {/if}

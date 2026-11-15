@@ -9,6 +9,7 @@
   import type { Altitude } from '@slate-dcs/shared';
 
   import AltitudeInput from '../../../components/AltitudeInput.svelte';
+  import Stepper from '../../../components/Stepper.svelte';
   import Card from '../../../components/Card.svelte';
   import CommandStatus from '../../../components/CommandStatus.svelte';
   import ConfirmButton from '../../../components/ConfirmButton.svelte';
@@ -104,6 +105,14 @@
             <span>{t('station.radius')}</span>
             <input class="mono" inputmode="decimal" bind:value={radius} />
           </label>
+          <Stepper
+            bind:value={radius}
+            step={1}
+            min={1}
+            max={100}
+            presets={[5, 10, 15, 20]}
+            label={t('station.radiusSteps')}
+          />
         {/if}
         <AltitudeInput bind:value={floor} label={t('station.floor')} />
         <AltitudeInput bind:value={ceiling} label={t('station.ceiling')} />

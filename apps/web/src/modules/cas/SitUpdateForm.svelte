@@ -9,10 +9,12 @@
 
   import CommandStatus from '../../components/CommandStatus.svelte';
   import EntryLinks from '../../components/EntryLinks.svelte';
+  import TextChips from '../../components/TextChips.svelte';
   import Ticks from '../../components/Ticks.svelte';
   import { deliveryOf, tickLevel } from '../../lib/cas.js';
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
+  import { TEXT_CHIPS, THREAT_TYPES } from '../../lib/picks.js';
 
   const {
     aoId,
@@ -47,6 +49,10 @@
 
   let command: string | null = $state(null);
   const busy = $derived(host.pendingOf(command)?.state === 'pending');
+  /** The AO's JTACs – who holds clearance authority (ui-design.md §11). */
+  const jtacs = $derived(
+    slices?.cas.aos.find((a) => a.aoId === aoId)?.jtacs.map((j) => j.callsign) ?? [],
+  );
 </script>
 
 <form
@@ -64,6 +70,7 @@
     <span>{t('sit.threats')}</span>
     <textarea bind:value={update.threats.text} maxlength="500" rows="2"></textarea>
   </label>
+  <TextChips bind:value={update.threats.text} chips={THREAT_TYPES} label={t('sit.threats')} />
   <EntryLinks bind:value={update.threats.cmIds} kinds={['threat']} label={t('links.threats')} />
   <label class="field">
     <span>{t('sit.targets')}</span>
@@ -74,6 +81,11 @@
     <span>{t('sit.friendlies')}</span>
     <textarea bind:value={update.friendlies.text} maxlength="500" rows="2"></textarea>
   </label>
+  <TextChips
+    bind:value={update.friendlies.text}
+    chips={TEXT_CHIPS.friendlies}
+    label={t('sit.friendlies')}
+  />
   <EntryLinks
     bind:value={update.friendlies.cmIds}
     kinds={['friendly']}
@@ -83,18 +95,31 @@
     <span>{t('sit.fires')}</span>
     <input bind:value={update.fires} maxlength="500" />
   </label>
+  <TextChips bind:value={update.fires} chips={TEXT_CHIPS.fires} label={t('sit.fires')} />
   <label class="field">
     <span>{t('sit.authority')}</span>
     <input bind:value={update.clearanceAuthority} maxlength="100" />
   </label>
+  <TextChips
+    bind:value={update.clearanceAuthority}
+    chips={jtacs}
+    join="replace"
+    label={t('sit.authority')}
+  />
   <label class="field">
     <span>{t('sit.restrictions')}</span>
     <input bind:value={update.restrictions} maxlength="500" />
   </label>
+  <TextChips
+    bind:value={update.restrictions}
+    chips={TEXT_CHIPS.restrictions}
+    label={t('sit.restrictions')}
+  />
   <label class="field">
     <span>{t('sit.hazards')}</span>
     <input bind:value={update.hazards} maxlength="500" />
   </label>
+  <TextChips bind:value={update.hazards} chips={TEXT_CHIPS.hazards} label={t('sit.hazards')} />
   <div class="actions">
     <button type="button" class="btn" onclick={onclose}>{t('action.close')}</button>
     <button type="submit" class="btn primary" disabled={busy}>{t('sit.send')}</button>

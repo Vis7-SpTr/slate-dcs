@@ -10,6 +10,8 @@
   import { untrack } from 'svelte';
 
   import CoordInput from './CoordInput.svelte';
+  import Stepper from './Stepper.svelte';
+  import ChoiceChips from './ChoiceChips.svelte';
   import { host } from '../lib/host.svelte.js';
   import { t } from '../lib/i18n/index.js';
 
@@ -92,15 +94,14 @@
     {#if points.length === 0}
       <p class="note amber">{t('point.noEntries')}</p>
     {:else}
-      <label class="field">
-        <span>{t('point.entryLabel', { label })}</span>
-        <select bind:value={cmId}>
-          <option value="" disabled>{t('point.pick')}</option>
-          {#each points as p (p.cmId)}
-            <option value={p.cmId}>{p.kind.toUpperCase()} {p.label}</option>
-          {/each}
-        </select>
-      </label>
+      <ChoiceChips
+        bind:value={cmId}
+        label={t('point.entryLabel', { label })}
+        options={points.map((p) => ({
+          value: p.cmId,
+          label: `${p.kind.toUpperCase()} ${p.label}`,
+        }))}
+      />
       {#if keyhole}
         <div class="choice axes" role="group" aria-label={t('point.axis')}>
           {#each ['E', 'A', 'B', 'C', 'D'] as const as a (a)}
@@ -119,6 +120,13 @@
           <label class="field">
             <span>{t('point.distance')}</span>
             <input class="mono" inputmode="decimal" bind:value={distance} />
+            <Stepper
+              bind:value={distance}
+              step={1}
+              min={0}
+              presets={[3, 5, 8, 10]}
+              label={t('point.distanceSteps')}
+            />
           </label>
         {/if}
       {/if}

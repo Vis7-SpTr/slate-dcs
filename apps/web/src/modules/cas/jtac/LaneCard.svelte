@@ -11,8 +11,10 @@
   import type { FireMission, Lane } from '@slate-dcs/shared';
 
   import CommandStatus from '../../../components/CommandStatus.svelte';
+  import ChoiceChips from '../../../components/ChoiceChips.svelte';
   import ConfirmButton from '../../../components/ConfirmButton.svelte';
   import CoordInput from '../../../components/CoordInput.svelte';
+  import TextChips from '../../../components/TextChips.svelte';
   import Ticks from '../../../components/Ticks.svelte';
   import {
     callsignOf,
@@ -26,6 +28,7 @@
   import { clock } from '../../../lib/clock.svelte.js';
   import { host } from '../../../lib/host.svelte.js';
   import { t } from '../../../lib/i18n/index.js';
+  import { TEXT_CHIPS } from '../../../lib/picks.js';
   import {
     clearConflicts,
     laneLaser,
@@ -244,19 +247,26 @@
           <span>{t('bda.target')}</span>
           <input bind:value={bdaTarget} maxlength="200" />
         </label>
-        <label class="field">
-          <span>{t('bda.effect')}</span>
-          <select bind:value={bdaEffect}>
-            {#each ['destroyed', 'damaged', 'neutralised', 'noEffect', 'unknown'] as const as e (e)}
-              <option value={e}>{t(`bda.effect.${e}`)}</option>
-            {/each}
-          </select>
-        </label>
-        <CoordInput bind:value={bdaLocation} label={t('bda.location')} style={who.style} />
+        <ChoiceChips
+          bind:value={bdaEffect}
+          label={t('bda.effect')}
+          options={(['destroyed', 'damaged', 'neutralised', 'noEffect', 'unknown'] as const).map(
+            (e) => ({ value: e, label: t(`bda.effect.${e}`) }),
+          )}
+        />
+        <CoordInput
+          bind:value={bdaLocation}
+          label={t('bda.location')}
+          style={who.style}
+          picks={mission.nineLine?.location
+            ? [{ label: t('coord.line6'), pos: mission.nineLine.location }]
+            : []}
+        />
         <label class="field">
           <span>{t('bda.remarks')}</span>
           <input bind:value={bdaRemarks} maxlength="500" />
         </label>
+        <TextChips bind:value={bdaRemarks} chips={TEXT_CHIPS.bda} label={t('bda.remarks')} />
         <div class="bda-actions">
           <button
             type="button"
@@ -275,6 +285,12 @@
         <span>{t('lane.abort.reasonInput')}</span>
         <input bind:value={reason} maxlength="100" placeholder={t('lane.abort.reason')} />
       </label>
+      <TextChips
+        bind:value={reason}
+        chips={TEXT_CHIPS.abort}
+        join="replace"
+        label={t('lane.abort.reasonInput')}
+      />
     {/if}
     <div class="slots">
       {@render slot(slots.first)}
