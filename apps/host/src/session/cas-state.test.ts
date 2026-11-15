@@ -2,6 +2,10 @@
 // The host's CAS picture rule by rule (P2.5): what each relay message does to
 // the slices, the snapshot, the brief draft and the CAS log copy.
 
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { defaultSlices } from '@slate-dcs/shared';
 import type { CasSlice, FireMission, LogEntry, Message } from '@slate-dcs/shared';
 import { describe, expect, it } from 'vitest';
@@ -246,7 +250,7 @@ describe('the snapshot (§4.5)', () => {
 });
 
 describe('the brief draft (§9.1)', () => {
-  function inFlight() {
+  function inFlight(file: string | null = null) {
     const { store } = setup();
     store.update({
       session: { ...store.get('session'), pid: ME.pid },
@@ -269,8 +273,50 @@ describe('the brief draft (§9.1)', () => {
         status: [],
       },
     });
-    return { store, draft: new BriefDraft(store) };
+    return { store, draft: new BriefDraft(store, file) };
   }
+
+  it('keeps the entered fields across a host restart, never the live ones', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'slate-brief-'));
+    try {
+      const file = join(dir, 'brief.json');
+      const first = inFlight(file);
+      first.draft.refresh();
+      expect(
+        first.draft.set(
+          {
+            callsign: 'ENFIELD ONE',
+            playtimeMin: 40,
+            abortCode: 'A1',
+            laserCodes: { flight: 1688, perAircraft: {} },
+          },
+          [],
+        ),
+      ).toEqual({ ok: true });
+      await first.draft.saved();
+      const kept = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+      expect(kept).toMatchObject({ playtimeMin: 40, abortCode: 'A1' });
+      expect(kept).not.toHaveProperty('callsign');
+
+      // A new host run: the draft starts from what was kept, live fields fresh.
+      const second = inFlight(file);
+      second.draft.refresh();
+      expect(second.store.get('cas').briefDraft?.brief).toMatchObject({
+        callsign: 'Enfield 1',
+        playtimeMin: 40,
+        abortCode: 'A1',
+        laserCodes: { flight: 1688 },
+      });
+
+      // A broken file counts as nothing entered.
+      await writeFile(file, '{ not json');
+      const third = inFlight(file);
+      third.draft.refresh();
+      expect(third.store.get('cas').briefDraft?.brief.playtimeMin).toBeNull();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 
   it('live fields follow the flight until typed over; reset gives them back', () => {
     const { store, draft } = inFlight();

@@ -14,6 +14,7 @@
   import CommandStatus from '../../../components/CommandStatus.svelte';
   import EmptyState from '../../../components/EmptyState.svelte';
   import Fold from '../../../components/Fold.svelte';
+  import LinkedList from '../../../components/LinkedList.svelte';
   import Ticks from '../../../components/Ticks.svelte';
   import {
     altText,
@@ -82,9 +83,12 @@
     restrictions: 'sit.restrictions',
     hazards: 'sit.hazards',
   } as const;
+  /** The filled fields, with their linked map entries (threats, targets, friendlies). */
   const filled = (n: SitUpdateNote) => [
-    ...sitFields.filter((f) => n.update[f].text !== '').map((f) => [f, n.update[f].text] as const),
-    ...sitTexts.filter((f) => n.update[f] !== '').map((f) => [f, n.update[f]] as const),
+    ...sitFields
+      .filter((f) => n.update[f].text !== '' || n.update[f].cmIds.length > 0)
+      .map((f) => [f, n.update[f].text, n.update[f].cmIds] as const),
+    ...sitTexts.filter((f) => n.update[f] !== '').map((f) => [f, n.update[f], []] as const),
   ];
 </script>
 
@@ -141,11 +145,14 @@
         open={!folded || !n.copied}
       >
         <Card title={t('cas.sitUpdate')}>
-          {#each filled(n) as [field, text] (field)}
-            <p class="line">
+          {#each filled(n) as [field, text, links] (field)}
+            <div class="line">
               <span class="label">{t(sitLabel[field])}</span>
-              <span>{text}</span>
-            </p>
+              <span>
+                {text}
+                <LinkedList cmIds={links} style={who.style} />
+              </span>
+            </div>
           {:else}
             <p class="dim">{t('value.none')}</p>
           {/each}

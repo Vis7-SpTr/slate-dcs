@@ -13,6 +13,7 @@
   import CommandStatus from '../../../components/CommandStatus.svelte';
   import ConfirmButton from '../../../components/ConfirmButton.svelte';
   import CoordInput from '../../../components/CoordInput.svelte';
+  import LinkedList from '../../../components/LinkedList.svelte';
   import Ticks from '../../../components/Ticks.svelte';
   import {
     callsignOf,
@@ -54,6 +55,11 @@
     slices ? tickLevel(deliveryOf(slices, 'fm.spi', mission.missionId), null, false) : 'none',
   );
 
+  /** His own position, to send as coordinates (scope §4.2) – "My position" in the SPI field. */
+  const ownPos = $derived.by((): LatLon | null => {
+    const pos = slices?.ownship.status?.pos;
+    return pos ? { lat: pos.lat, lon: pos.lon } : null;
+  });
   let spi: LatLon | null = $state(null);
   let spiElevation = $state('');
   let command: string | null = $state(null);
@@ -125,6 +131,9 @@
                     point: pointText(slices, win.area.center).name ?? t('window.coords'),
                   })}
           </span>
+          {#if win.targets.text}<span>{win.targets.text}</span>{/if}
+          <LinkedList cmIds={win.targets.cmIds} style={who.style} />
+          {#each win.restrictions as r (r)}<span class="restriction">{r}</span>{/each}
         {/if}
       {:else}
         <strong>{t(`pilot.clear.${clearance}`)}</strong>
@@ -210,7 +219,12 @@
             {/if}
           </p>
         {/if}
-        <CoordInput bind:value={spi} label={t('pilot.fm.spiInput')} style={who.style} />
+        <CoordInput
+          bind:value={spi}
+          label={t('pilot.fm.spiInput')}
+          style={who.style}
+          own={ownPos}
+        />
         <div class="spi-send">
           <label class="field">
             <span>{t('pilot.fm.spiElevation')}</span>
@@ -306,6 +320,11 @@
   .clearance.bda,
   .clearance.closed {
     color: var(--text-dim);
+  }
+
+  .restriction {
+    color: var(--amber);
+    font-weight: 700;
   }
 
   .changed {

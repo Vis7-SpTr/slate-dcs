@@ -13,6 +13,7 @@
   import CommandStatus from '../../../components/CommandStatus.svelte';
   import ConfirmButton from '../../../components/ConfirmButton.svelte';
   import Fold from '../../../components/Fold.svelte';
+  import LinkedList from '../../../components/LinkedList.svelte';
   import Ticks from '../../../components/Ticks.svelte';
   import {
     callsignOf,
@@ -353,6 +354,7 @@
           </p>
           <p>{t('window.covers', { who: w.pids.map((p) => callsignOf(slices, p)).join(', ') })}</p>
           {#if w.targets.text}<p>{t('window.targets')}: {w.targets.text}</p>{/if}
+          <LinkedList cmIds={w.targets.cmIds} style={who.style} />
           {#each w.restrictions as r (r)}<p class="amber">{r}</p>{/each}
           {#if rights.inCommand}
             <div class="end">

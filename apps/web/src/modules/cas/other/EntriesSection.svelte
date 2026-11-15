@@ -6,7 +6,6 @@
   tap-to-arm; an entry a mission or hold uses can't go (`inUse`).
 -->
 <script lang="ts">
-  import { PILOT_CM_KINDS } from '@slate-dcs/shared';
   import type { CmKind, MapEntry } from '@slate-dcs/shared';
 
   import CommandStatus from '../../../components/CommandStatus.svelte';
@@ -45,13 +44,18 @@
   });
 
   let creating = $state(false);
+  /** The entry being changed (screen-local). */
+  let editing: string | null = $state(null);
   let command: string | null = $state(null);
 
-  /** Who may delete it (§8.4): JTACs of its AO, pilots their own markers. */
-  function canDelete(e: MapEntry): boolean {
+  /**
+   * Who may change or delete it (§8.4): the AO's JTAC in command every entry
+   * of his AO, everyone else what he drew himself.
+   */
+  function canChange(e: MapEntry): boolean {
     if (!who) return false;
-    if (who.ao) return e.aoId === null || e.aoId === who.ao.aoId;
-    return PILOT_CM_KINDS.has(e.kind) && e.author === who.pid;
+    if (e.author === who.pid) return true;
+    return who.aoCommand && who.ao !== null && e.aoId === who.ao.aoId;
   }
 </script>
 
@@ -95,8 +99,24 @@
                 .join(' · ')}
             </p>
           {/if}
-          {#if canDelete(e)}
+          {#if editing === e.cmId}
+            <EntryForm
+              aoId={e.aoId}
+              entry={e}
+              onclose={() => {
+                editing = null;
+              }}
+            />
+          {:else if canChange(e)}
             <div class="actions">
+              <button
+                type="button"
+                class="btn"
+                onclick={() => {
+                  editing = e.cmId;
+                  creating = false;
+                }}>{t('entry.edit')}</button
+              >
               <ConfirmButton
                 label={t('entry.delete')}
                 onconfirm={() => {
@@ -198,6 +218,9 @@
   }
 
   .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
     margin-top: 0.4rem;
   }
 </style>

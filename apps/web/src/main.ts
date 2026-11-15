@@ -10,6 +10,7 @@ import './app.css';
 import { mount } from 'svelte';
 
 import { host } from './lib/host.svelte.js';
+import { okb } from './lib/okb.svelte.js';
 import App from './shell/App.svelte';
 
 const target = document.getElementById('app');
@@ -17,3 +18,5 @@ if (target === null) throw new Error('Missing #app element');
 
 host.start();
 mount(App, { target });
+// In an OpenKneeboard tab: set the page's own size and ratio (OKB tabs can't be resized by hand).
+void okb.start();

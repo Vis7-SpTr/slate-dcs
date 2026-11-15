@@ -8,6 +8,7 @@ import {
   coordStyle,
   formatLogMtime,
   formatPosition,
+  holdsConflict,
   keyholePoint,
   keyholePointName,
   mapUtcOffsetHours,
@@ -315,4 +316,42 @@ export function holdShapeText(h: Hold): string {
   return h.shape === 'orbit'
     ? `${t('hold.orbit')} ${nm(h.radiusM)} · ${turn}`
     : `${t('hold.racetrack')} ${nm(h.legM)} · ${t('hold.inboundShort', { deg: String(h.inboundDeg ?? 0).padStart(3, '0') })} · ${turn}`;
+}
+
+/**
+ * Holds in the AO that a draft hold would overlap in area and block – the same
+ * check the relay runs (§9.4), so the JTAC sees it before sending. Flagged,
+ * never blocked.
+ */
+export function holdOverlaps(
+  slices: Slices,
+  aoId: string,
+  draft: Parameters<typeof holdsConflict>[0],
+  except: string | null,
+): Hold[] {
+  const lookup = (cmId: string): LatLon | null => {
+    const entry = slices.cas.mapEntries.find((e) => e.cmId === cmId);
+    return entry?.shape === 'point' ? entry.geom : null;
+  };
+  return slices.cas.holds.filter(
+    (h) => h.aoId === aoId && h.holdId !== except && holdsConflict(draft, h, lookup),
+  );
+}
+
+/** A map entry as a short name: `THREAT SA-8`, `ENEMY 2x BMP-2`, `FRIENDLY CHALK 1`. */
+export function entryName(entry: MapEntry): string {
+  const kind = KIND_NAMES[entry.kind] ?? entry.kind.toUpperCase();
+  const count = entry.count !== null && entry.count > 1 ? `${String(entry.count)}x ` : '';
+  return `${kind} ${count}${entry.label ?? entry.text ?? ''}`.trim();
+}
+
+/** Linked map entries (§9.3, §10.4) that this user can see, with name and position. */
+export function linkedEntries(
+  slices: Slices,
+  cmIds: readonly string[],
+): { cmId: string; name: string; at: LatLon | null }[] {
+  return cmIds.flatMap((cmId) => {
+    const entry = slices.cas.mapEntries.find((e) => e.cmId === cmId);
+    return entry ? [{ cmId, name: entryName(entry), at: entryPosition(entry) }] : [];
+  });
 }

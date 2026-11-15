@@ -206,6 +206,12 @@ export const enCas = {
   'sit.copied': 'COPY',
   'sit.notCopied': 'no COPY yet',
 
+  // Links to map entries (§9.3, §10.4)
+  'links.threats': 'Link threat markers',
+  'links.targets': 'Link enemy markers',
+  'links.friendlies': 'Link friendly entries',
+  'links.none': 'No markers of this kind to link yet (Other → Map entries).',
+
   // Point references (§8.5): IP/CP, keyhole point or coordinates
   'point.from': '{label} from',
   'point.none': 'None',
@@ -224,6 +230,7 @@ export const enCas = {
   'hold.flight.pick': 'Pick a checked-in flight',
   'hold.for': 'Hold for {flight}',
   'hold.point': 'Hold point',
+  'hold.overlapsBefore': 'with {with} (area and block). You can still send it.',
   'hold.floor': 'Floor',
   'hold.ceiling': 'Ceiling',
   'hold.shape': 'Shape',
@@ -284,6 +291,11 @@ export const enCas = {
   'entry.visibility': 'Who sees it',
   'entry.create': 'Add',
   'entry.new': 'New map entry',
+  'entry.edit': 'Change',
+  'entry.save': 'Save',
+  'entry.editing': 'Change {kind} {label}',
+  'entry.keyholeMove':
+    'Moving ECHO moves every point on this keyhole – holds and missions on it follow (a mission past assigned shows it as a line 1 change).',
   'entry.delete': 'Delete',
   'entry.circleOf': 'circle {nm} NM',
   'entry.ringOf': 'ring {nm} NM',

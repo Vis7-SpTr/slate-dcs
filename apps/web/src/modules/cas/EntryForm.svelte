@@ -1,6 +1,8 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!--
-  A new map entry by typed coordinates (protocol.md §8.4, D4, P2.6): IP/CP,
+  A new map entry by typed coordinates (protocol.md §8.4, D4, P2.6) – or a
+  change to one (`entry`): position, name, text, size, visibility; the kind and
+  AO stay (cm.update). Moving a keyhole's ECHO moves every point on it. IP/CP,
   keyhole (ECHO), friendly, threat, enemy – points; NFA/RFA/ROZ and areas as
   circles. Lines and polygons are drawn on the map in P3. JTACs draw every
   kind, pilots friendly/threat/enemy. The draft is checked with the shared
@@ -8,7 +10,8 @@
 -->
 <script lang="ts">
   import { AO_CM_KINDS, CM_SHAPES, MapEntryDraft, PILOT_CM_KINDS } from '@slate-dcs/shared';
-  import type { Altitude, CmKind, LatLon } from '@slate-dcs/shared';
+  import type { Altitude, CmKind, LatLon, MapEntry } from '@slate-dcs/shared';
+  import { untrack } from 'svelte';
 
   import AltitudeInput from '../../components/AltitudeInput.svelte';
   import CommandStatus from '../../components/CommandStatus.svelte';
@@ -18,7 +21,11 @@
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
 
-  const { aoId, onclose }: { aoId: string | null; onclose: () => void } = $props();
+  const {
+    aoId,
+    entry = null,
+    onclose,
+  }: { aoId: string | null; entry?: MapEntry | null; onclose: () => void } = $props();
 
   const slices = $derived(host.view.slices);
   const who = $derived(slices ? casWho(slices) : null);
@@ -34,18 +41,30 @@
     ),
   );
 
-  let kind = $state<CmKind>('ip');
-  let label = $state('');
-  let text = $state('');
-  let at: LatLon | null = $state(null);
-  let circle = $state(false);
-  let radius = $state('1');
-  let ring = $state('');
-  let count = $state('');
-  let moving = $state(false);
-  let floor: Altitude = $state({ m: 0, ref: 'sfc' });
-  let ceiling: Altitude = $state({ m: 3048, ref: 'msl' });
-  let visibility: 'ao' | 'coalition' = $state('ao');
+  // An entry being changed fills the form once; the relay's later updates don't reset it.
+  const start = untrack(() => entry);
+  const startGeom = start?.geom as LatLon | { center: LatLon; radiusM: number } | undefined;
+  const startCircle = start?.shape === 'circle' && startGeom !== undefined && 'center' in startGeom;
+  const nmText = (m: number | null | undefined, d: string) =>
+    m === null || m === undefined ? d : String(Math.round((m / 1852) * 10) / 10);
+  let kind = $state<CmKind>(start?.kind ?? 'ip');
+  let label = $state(start?.label ?? '');
+  let text = $state(start?.text ?? '');
+  let at: LatLon | null = $state(
+    startGeom === undefined ? null : 'center' in startGeom ? startGeom.center : startGeom,
+  );
+  let circle = $state(startCircle);
+  let radius = $state(startCircle ? nmText((startGeom as { radiusM: number }).radiusM, '1') : '1');
+  let ring = $state(nmText(start?.ringM, ''));
+  let count = $state(
+    start?.count === null || start?.count === undefined ? '' : String(start.count),
+  );
+  let moving = $state(start?.moving ?? false);
+  let floor: Altitude = $state(start?.block?.floor ?? { m: 0, ref: 'sfc' });
+  let ceiling: Altitude = $state(start?.block?.ceiling ?? { m: 3048, ref: 'msl' });
+  let visibility: 'ao' | 'coalition' = $state(start?.visibility ?? 'ao');
+  /** The AO an entry being changed is tied to – it can't move to another (§8.4). */
+  const entryAo = start ? start.aoId : null;
 
   const canCircle = $derived(CM_SHAPES[kind].includes('circle'));
   const onlyCircle = $derived(!CM_SHAPES[kind].includes('point'));
@@ -55,7 +74,7 @@
 
   const draft = $derived.by(() => {
     if (!at || !slices) return null;
-    const ao = AO_CM_KINDS.has(kind) || visibility === 'ao' ? aoId : null;
+    const ao = start ? entryAo : AO_CM_KINDS.has(kind) || visibility === 'ao' ? aoId : null;
     const fields = {
       kind,
       label: label.trim() === '' ? null : label.trim().toUpperCase(),
@@ -63,7 +82,12 @@
       ringM: kind === 'threat' && ring.trim() !== '' ? nm(ring) : null,
       count: kind === 'enemy' && count.trim() !== '' ? Number(count) : null,
       moving: kind === 'enemy' ? moving : null,
-      observedMtime: marker ? missionTimeNow(slices, clock.now) : null,
+      // A changed marker keeps when it was seen; a new one is seen now.
+      observedMtime: start
+        ? start.observedMtime
+        : marker
+          ? missionTimeNow(slices, clock.now)
+          : null,
       block: kind === 'roz' ? { floor, ceiling } : null,
       aoId: ao,
       visibility: ao === null ? ('coalition' as const) : visibility,
@@ -84,21 +108,31 @@
     class="form-grid entry"
     onsubmit={(event) => {
       event.preventDefault();
-      if (check?.success) command = host.send({ cmd: 'cm.create', args: check.data });
+      if (!check?.success) return;
+      command = start
+        ? host.send({ cmd: 'cm.update', args: { cmId: start.cmId, entry: check.data } })
+        : host.send({ cmd: 'cm.create', args: check.data });
     }}
   >
-    <div class="choice kinds" role="group" aria-label={t('entry.kind')}>
-      {#each kinds as k (k)}
-        <button
-          type="button"
-          class="btn"
-          class:selected={kind === k}
-          onclick={() => {
-            kind = k;
-          }}>{t(`cm.${k}`)}</button
-        >
-      {/each}
-    </div>
+    {#if start}
+      <p class="to">
+        {t('entry.editing', { kind: t(`cm.${start.kind}`), label: start.label ?? '' })}
+      </p>
+      {#if start.kind === 'keyhole'}<p class="note">{t('entry.keyholeMove')}</p>{/if}
+    {:else}
+      <div class="choice kinds" role="group" aria-label={t('entry.kind')}>
+        {#each kinds as k (k)}
+          <button
+            type="button"
+            class="btn"
+            class:selected={kind === k}
+            onclick={() => {
+              kind = k;
+            }}>{t(`cm.${k}`)}</button
+          >
+        {/each}
+      </div>
+    {/if}
     <label class="field">
       <span>{t('entry.label')}</span>
       <input bind:value={label} maxlength="48" placeholder={t('entry.label.placeholder')} />
@@ -175,7 +209,7 @@
       <span>{t('entry.text')}</span>
       <input bind:value={text} maxlength="500" />
     </label>
-    {#if !AO_CM_KINDS.has(kind) && aoId !== null}
+    {#if !AO_CM_KINDS.has(kind) && (start ? entryAo !== null : aoId !== null)}
       <div class="choice" role="group" aria-label={t('entry.visibility')}>
         {#each ['ao', 'coalition'] as const as v (v)}
           <button
@@ -193,7 +227,7 @@
     <div class="actions">
       <button type="button" class="btn" onclick={onclose}>{t('action.close')}</button>
       <button type="submit" class="btn primary" disabled={busy || !check?.success}
-        >{t('entry.create')}</button
+        >{start ? t('entry.save') : t('entry.create')}</button
       >
     </div>
     <CommandStatus id={command} />
@@ -201,6 +235,11 @@
 {/if}
 
 <style>
+  .to {
+    margin: 0;
+    font-weight: 700;
+  }
+
   .entry {
     margin-top: 0.5rem;
     padding: 0.75rem;

@@ -12,7 +12,7 @@
   import AltitudeInput from '../../components/AltitudeInput.svelte';
   import CommandStatus from '../../components/CommandStatus.svelte';
   import PointInput from '../../components/PointInput.svelte';
-  import { casWho, flightName, mtimeText, parseMissionTime } from '../../lib/cas.js';
+  import { casWho, flightName, holdOverlaps, mtimeText, parseMissionTime } from '../../lib/cas.js';
   import { clock } from '../../lib/clock.svelte.js';
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
@@ -72,6 +72,30 @@
 
   let command: string | null = $state(null);
   const busy = $derived(host.pendingOf(command)?.state === 'pending');
+
+  /** The hold as it would be sent; `null` until it is complete. */
+  const draft = $derived(
+    point === null || !ready
+      ? null
+      : {
+          flightId,
+          point,
+          floor,
+          ceiling,
+          turns,
+          shape,
+          radiusM: shape === 'orbit' ? num(radius) * NM : null,
+          legM: shape === 'racetrack' ? num(leg) * NM : null,
+          inboundDeg: shape === 'racetrack' ? num(inbound) : null,
+          from,
+          until,
+          visibility,
+        },
+  );
+  /** Overlaps with the AO's other holds, before sending (§9.4) – flagged, not blocked. */
+  const overlaps = $derived(
+    slices && draft ? holdOverlaps(slices, aoId, draft, hold?.holdId ?? null) : [],
+  );
 
   function send(): void {
     if (!point) return;
@@ -180,6 +204,14 @@
       </label>
     </div>
     {#if badTime}<p class="note amber">{t('time.bad')}</p>{/if}
+    {#if overlaps.length > 0}
+      <p class="note amber">
+        <strong>{t('hold.conflict')}</strong>
+        {t('hold.overlapsBefore', {
+          with: overlaps.map((h) => flightName(slices, h.flightId)).join(', '),
+        })}
+      </p>
+    {/if}
     <div class="choice" role="group" aria-label={t('entry.visibility')}>
       {#each ['ao', 'coalition'] as const as v (v)}
         <button

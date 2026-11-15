@@ -211,6 +211,7 @@ async function main(): Promise<void> {
       tokens: new TokenStore(join(dataDir, 'relays.json')),
       log: app.log.child({ module: 'session' }),
       app: `slate-host ${BUILD}`,
+      briefFile: join(dataDir, 'brief.json'),
     });
     const hostMode = new HostMode({
       store,

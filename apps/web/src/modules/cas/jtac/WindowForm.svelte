@@ -12,6 +12,7 @@
   import { untrack } from 'svelte';
 
   import CommandStatus from '../../../components/CommandStatus.svelte';
+  import EntryLinks from '../../../components/EntryLinks.svelte';
   import PointInput from '../../../components/PointInput.svelte';
   import {
     callsignOf,
@@ -48,6 +49,7 @@
   let center: PointRef | null = $state(start.nineLine?.location ?? null);
   let radius = $state('1');
   let targets = $state(start.nineLine?.description ?? '');
+  let targetLinks: string[] = $state([]);
   let restrictions = $state(start.remarks.restrictions.join('\n'));
 
   const now = $derived(slices ? missionTimeNow(slices, clock.now) : null);
@@ -71,7 +73,7 @@
     from: from ?? -1,
     until: until ?? -1,
     area,
-    targets: { text: targets.trim(), cmIds: [] },
+    targets: { text: targets.trim(), cmIds: targetLinks },
     restrictions: restrictions
       .split('\n')
       .map((r) => r.trim())
@@ -185,6 +187,7 @@
       <span>{t('window.targets')}</span>
       <input bind:value={targets} maxlength="500" />
     </label>
+    <EntryLinks bind:value={targetLinks} kinds={['enemy']} label={t('links.targets')} />
     <label class="field">
       <span>{t('window.restrictions')}</span>
       <textarea bind:value={restrictions} rows="2"></textarea>

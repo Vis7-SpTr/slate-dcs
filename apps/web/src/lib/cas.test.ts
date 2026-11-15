@@ -3,14 +3,17 @@
 // point references, times, ticks, missions and lasers.
 
 import { defaultSlices, distanceM } from '@slate-dcs/shared';
-import type { Ao, CheckIn, Delivery, FireMission, MapEntry, Slices } from '@slate-dcs/shared';
+import type { Ao, CheckIn, Delivery, FireMission, Hold, MapEntry, Slices } from '@slate-dcs/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
   callsignOf,
   casWho,
   deliveryOf,
+  entryName,
+  holdOverlaps,
   laserUses,
+  linkedEntries,
   parseMissionTime,
   pointText,
   sharedCodes,
@@ -243,5 +246,60 @@ describe('missions and lasers', () => {
       [1688, 'flight'],
     ]);
     expect([...sharedCodes(uses)]).toEqual([1511]);
+  });
+});
+
+describe('hold overlap before sending (§9.4)', () => {
+  const NM = 1852;
+  const hold: Hold = {
+    holdId: 'h_000001',
+    aoId: ao.aoId,
+    conflicts: [],
+    flightId: 'f_3k9q2m',
+    point: { cmId: keyhole.cmId, axis: 'A', distanceNm: 8 },
+    floor: { m: 4572, ref: 'msl' },
+    ceiling: { m: 5181, ref: 'msl' },
+    turns: 'left',
+    shape: 'orbit',
+    radiusM: 2 * NM,
+    legM: null,
+    inboundDeg: null,
+    from: null,
+    until: null,
+    visibility: 'ao',
+  };
+  const s = slices((x) => {
+    x.cas = { ...x.cas, holds: [hold] };
+  });
+
+  it('the same point and block overlaps; a stacked block and the hold itself do not', () => {
+    expect(holdOverlaps(s, ao.aoId, hold, null).map((h) => h.holdId)).toEqual(['h_000001']);
+    expect(holdOverlaps(s, ao.aoId, hold, 'h_000001')).toEqual([]);
+    const above = { ...hold, floor: { m: 5500, ref: 'msl' as const } };
+    expect(holdOverlaps(s, ao.aoId, { ...above, ceiling: { m: 6000, ref: 'msl' } }, null)).toEqual(
+      [],
+    );
+    expect(holdOverlaps(s, 'a_other0', hold, null)).toEqual([]);
+  });
+});
+
+describe('links to map entries (§9.3, §10.4)', () => {
+  const enemy: MapEntry = {
+    ...keyhole,
+    cmId: 'c_en_01',
+    kind: 'enemy',
+    label: 'BMP-2',
+    count: 2,
+  };
+
+  it('names an entry with its count, and skips entries this user cannot see', () => {
+    expect(entryName(enemy)).toBe('ENEMY 2x BMP-2');
+    const s = slices((x) => {
+      x.cas = { ...x.cas, mapEntries: [keyhole, enemy] };
+    });
+    const linked = linkedEntries(s, ['c_en_01', 'c_gone']);
+    expect(linked).toHaveLength(1);
+    expect(linked[0]).toMatchObject({ cmId: 'c_en_01', name: 'ENEMY 2x BMP-2' });
+    expect(linked[0]?.at).not.toBeNull();
   });
 });

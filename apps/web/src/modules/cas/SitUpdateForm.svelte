@@ -8,6 +8,7 @@
   import type { SitUpdate } from '@slate-dcs/shared';
 
   import CommandStatus from '../../components/CommandStatus.svelte';
+  import EntryLinks from '../../components/EntryLinks.svelte';
   import Ticks from '../../components/Ticks.svelte';
   import { deliveryOf, tickLevel } from '../../lib/cas.js';
   import { host } from '../../lib/host.svelte.js';
@@ -63,14 +64,21 @@
     <span>{t('sit.threats')}</span>
     <textarea bind:value={update.threats.text} maxlength="500" rows="2"></textarea>
   </label>
+  <EntryLinks bind:value={update.threats.cmIds} kinds={['threat']} label={t('links.threats')} />
   <label class="field">
     <span>{t('sit.targets')}</span>
     <textarea bind:value={update.targets.text} maxlength="500" rows="2"></textarea>
   </label>
+  <EntryLinks bind:value={update.targets.cmIds} kinds={['enemy']} label={t('links.targets')} />
   <label class="field">
     <span>{t('sit.friendlies')}</span>
     <textarea bind:value={update.friendlies.text} maxlength="500" rows="2"></textarea>
   </label>
+  <EntryLinks
+    bind:value={update.friendlies.cmIds}
+    kinds={['friendly']}
+    label={t('links.friendlies')}
+  />
   <label class="field">
     <span>{t('sit.fires')}</span>
     <input bind:value={update.fires} maxlength="500" />

@@ -3,11 +3,15 @@
 // live fields – callsign, aircraft, position, ordnance – follow the flight and
 // the status packages until the lead types over one (`edited`); at sending
 // they are refreshed once more. Entered fields stay as typed, laser codes
-// included (prefilled from the last brief).
+// included (prefilled from the last brief), and are kept in the data folder
+// (`brief.json`), so a host restart doesn't lose them.
+
+import { readFileSync } from 'node:fs';
 
 import { CheckInBrief } from '@slate-dcs/shared';
 import type { BriefField, CasSlice, StatusUpdate } from '@slate-dcs/shared';
 
+import { writeFileAtomic } from '../fs-safe.js';
 import type { StateStore } from '../state/store.js';
 
 type Brief = CheckInBrief;
@@ -16,17 +20,50 @@ type Armament = NonNullable<StatusUpdate['body']['armament']>;
 /** Fields the host fills in and refreshes (§9.1); the rest the lead enters. */
 export const LIVE_FIELDS = ['callsign', 'aircraft', 'position', 'ordnance'] as const;
 
-/** A brief nobody has typed into yet. */
-function empty(live: Pick<Brief, (typeof LIVE_FIELDS)[number]>): Brief {
-  return {
-    ...live,
-    playtimeMin: null,
-    capabilities: [],
-    abortCode: null,
-    missionNumber: null,
-    laserCodes: { flight: null, perAircraft: {} },
-    remarks: '',
-  };
+/** Fields the lead enters; these are kept across a host restart. */
+export const ENTERED_FIELDS = [
+  'playtimeMin',
+  'capabilities',
+  'abortCode',
+  'missionNumber',
+  'laserCodes',
+  'remarks',
+] as const;
+
+type Entered = Pick<Brief, (typeof ENTERED_FIELDS)[number]>;
+
+const Entered = CheckInBrief.pick({
+  playtimeMin: true,
+  capabilities: true,
+  abortCode: true,
+  missionNumber: true,
+  laserCodes: true,
+  remarks: true,
+});
+
+const NOTHING_ENTERED: Entered = {
+  playtimeMin: null,
+  capabilities: [],
+  abortCode: null,
+  missionNumber: null,
+  laserCodes: { flight: null, perAircraft: {} },
+  remarks: '',
+};
+
+function enteredOf(brief: Brief): Entered {
+  const out: Record<string, unknown> = {};
+  for (const field of ENTERED_FIELDS) out[field] = brief[field];
+  return out as Entered;
+}
+
+/** Reads the kept entered fields; anything unreadable or invalid counts as nothing entered. */
+export function loadEntered(path: string): Entered {
+  try {
+    const parsed = Entered.safeParse(JSON.parse(readFileSync(path, 'utf8')));
+    return parsed.success ? parsed.data : NOTHING_ENTERED;
+  } catch {
+    return NOTHING_ENTERED;
+  }
 }
 
 /** Totals per weapon over the flight's armament (§9.1): A/G first, then A/A, the gun last. */
@@ -53,9 +90,26 @@ export function ordnanceTotals(armaments: readonly (Armament | null)[]): Brief['
 
 export class BriefDraft {
   readonly #store: StateStore;
+  readonly #file: string | null;
+  /** The entered fields as last kept; a new draft starts from them. */
+  #entered: Entered;
+  #saving: Promise<void> = Promise.resolve();
 
-  constructor(store: StateStore) {
+  /** `file`: where the entered fields are kept (`<data>/brief.json`); none in tests. */
+  constructor(store: StateStore, file: string | null = null) {
     this.#store = store;
+    this.#file = file;
+    this.#entered = file ? loadEntered(file) : NOTHING_ENTERED;
+  }
+
+  /** Resolves once every change so far is on disk (for tests and shutdown). */
+  saved(): Promise<void> {
+    return this.#saving;
+  }
+
+  /** A brief nobody has typed into yet in this run: live fields plus what was kept. */
+  #empty(live: Pick<Brief, (typeof LIVE_FIELDS)[number]>): Brief {
+    return { ...live, ...structuredClone(this.#entered) };
   }
 
   /** The live fields as they are now; `null` outside a flight (nothing to check in). */
@@ -93,7 +147,7 @@ export class BriefDraft {
     const live = this.live();
     if (!live) return;
     const cas = this.#store.get('cas');
-    const draft = cas.briefDraft ?? { brief: empty(live), edited: [] };
+    const draft = cas.briefDraft ?? { brief: this.#empty(live), edited: [] };
     const brief = { ...draft.brief };
     for (const field of LIVE_FIELDS) {
       if (!draft.edited.includes(field)) Object.assign(brief, { [field]: live[field] });
@@ -113,7 +167,7 @@ export class BriefDraft {
     const live = this.live();
     const current = this.#store.get('cas').briefDraft;
     if (!current && !live) return { ok: false, text: 'Join a flight first' };
-    const draft = current ?? { brief: empty(live ?? ({} as never)), edited: [] };
+    const draft = current ?? { brief: this.#empty(live ?? ({} as never)), edited: [] };
     const brief: Brief = { ...draft.brief, ...changes };
     const edited = new Set([...draft.edited, ...(Object.keys(changes) as BriefField[])]);
     for (const field of reset) {
@@ -142,5 +196,13 @@ export class BriefDraft {
 
   #setDraft(draft: NonNullable<CasSlice['briefDraft']>): void {
     this.#store.update({ cas: { ...this.#store.get('cas'), briefDraft: draft } });
+    const entered = enteredOf(draft.brief);
+    if (JSON.stringify(entered) === JSON.stringify(this.#entered)) return;
+    this.#entered = structuredClone(entered);
+    const file = this.#file;
+    if (!file) return;
+    const text = `${JSON.stringify(entered, null, 2)}\n`;
+    // One write after the other, so the last change is the one on disk.
+    this.#saving = this.#saving.then(() => writeFileAtomic(file, text)).catch(() => undefined);
   }
 }

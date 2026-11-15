@@ -21,6 +21,7 @@
 
   import CommandStatus from '../../../components/CommandStatus.svelte';
   import CoordInput from '../../../components/CoordInput.svelte';
+  import EntryLinks from '../../../components/EntryLinks.svelte';
   import PointInput from '../../../components/PointInput.svelte';
   import {
     callsignOf,
@@ -102,6 +103,7 @@
   let markAt: PointRef | null = $state(nl.mark.at);
   let markText = $state(nl.mark.text);
   let friendlies = $state(nl.friendlies.text);
+  let friendlyLinks: string[] = $state([...nl.friendlies.cmIds]);
   let egress = $state(nl.egress);
 
   let ltl = $state(text(rm.ltl));
@@ -157,7 +159,7 @@
           at: markAt,
           text: markText.trim(),
         },
-        friendlies: { text: friendlies.trim(), cmIds: nl.friendlies.cmIds },
+        friendlies: { text: friendlies.trim(), cmIds: friendlyLinks },
         egress: egress.trim(),
       },
       remarks: {
@@ -434,6 +436,7 @@
         <span>{t('nine.8.input')}</span>
         <input bind:value={friendlies} maxlength="500" placeholder="South 800 m" />
       </label>
+      <EntryLinks bind:value={friendlyLinks} kinds={['friendly']} label={t('links.friendlies')} />
       <label class="field">
         <span>{t('nine.9.input')}</span>
         <input bind:value={egress} maxlength="200" placeholder={t('nine.9.placeholder')} />

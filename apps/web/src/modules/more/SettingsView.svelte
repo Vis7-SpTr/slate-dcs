@@ -11,6 +11,7 @@
   import CommandStatus from '../../components/CommandStatus.svelte';
   import AppCard from './AppCard.svelte';
   import LanCard from './LanCard.svelte';
+  import OkbCard from './OkbCard.svelte';
   import { host } from '../../lib/host.svelte.js';
   import { t } from '../../lib/i18n/index.js';
 
@@ -106,6 +107,8 @@
       </div>
       <CommandStatus id={speedsCommand} />
     </Card>
+
+    <OkbCard />
 
     <LanCard />
 

@@ -63,6 +63,8 @@ export interface RelayClientOptions {
   now?: () => number;
   /** Replaceable for tests. */
   dial?: typeof dialWss;
+  /** Where the brief's entered fields are kept (`<data>/brief.json`); none = not kept. */
+  briefFile?: string;
 }
 
 type JoinArgs = Extract<Command, { cmd: 'session.join' }>['args'];
@@ -183,7 +185,7 @@ export class RelayClient {
     this.#now = options.now ?? Date.now;
     this.#dial = options.dial ?? dialWss;
     this.#cas = new CasState(this.#store, this.#now);
-    this.#brief = new BriefDraft(this.#store);
+    this.#brief = new BriefDraft(this.#store, options.briefFile ?? null);
     this.#fuel = new FuelCalls(this.#store, this.#now);
     this.#logCopy = new CasLogCopy(this.#store, (body) => this.#logRequest(body));
   }

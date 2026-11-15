@@ -7,6 +7,7 @@
   Used by the JTAC now and by the pilot's card in P2.7.
 -->
 <script lang="ts">
+  import LinkedList from '../../components/LinkedList.svelte';
   import { positionText } from '../../lib/cas.js';
   import type { CoordStyle, FireMission } from '@slate-dcs/shared';
 
@@ -85,6 +86,9 @@
       <span class="label">{line.label}</span>
       <span class="value mono">{fieldText(slices, line.path, line.value, style)}</span>
       {#if line.rb}<span class="rb" title={t('nine.rb.title')}>RB</span>{/if}
+      {#if line.path === 'nineLine.friendlies' && nine && nine.friendlies.cmIds.length > 0}
+        <span class="links"><LinkedList cmIds={nine.friendlies.cmIds} {style} /></span>
+      {/if}
       {#if line.path in changed}
         <span class="old mono">
           {t('nine.was')} <s>{fieldText(slices, line.path, changed[line.path], style)}</s>
@@ -219,6 +223,7 @@
     grid-row: 1;
   }
 
+  .links,
   .big,
   .second,
   .passed,
