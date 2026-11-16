@@ -32,14 +32,31 @@
   );
 
   onMount(() => {
-    // Early, before the browser decides on its own keyboard (iPad with "Always").
+    // OpenKneeboard (Chromium Embedded, windowless) sends clicks but never
+    // gives the page focus, so no focus events arrive there: a click on a field
+    // opens the keyboard, a click anywhere else closes it. Focus still works
+    // where it exists (browser, iPad with "Always").
     const down = (e: PointerEvent) => {
-      if (osk.enabled && isTextField(e.target)) osk.suppress(e.target);
+      if (!osk.enabled) return;
+      if (isTextField(e.target)) {
+        // Early, before the browser decides on its own keyboard.
+        osk.suppress(e.target);
+        return;
+      }
+      if (osk.field === null) return;
+      if (e.target instanceof Node && panel?.contains(e.target)) return;
+      osk.close();
+    };
+    const openOn = (el: EventTarget | null) => {
+      if (!osk.enabled || !isTextField(el)) return;
+      osk.open(el);
+      void reveal(el);
+    };
+    const click = (e: MouseEvent) => {
+      openOn(e.target);
     };
     const focusIn = (e: FocusEvent) => {
-      if (!osk.enabled || !isTextField(e.target)) return;
-      osk.open(e.target);
-      void reveal(e.target);
+      openOn(e.target);
     };
     const focusOut = (e: FocusEvent) => {
       if (osk.field === null || e.target !== osk.field) return;
@@ -49,14 +66,16 @@
       osk.close();
     };
     const selection = () => {
-      if (osk.field && document.activeElement === osk.field) osk.sync();
+      if (osk.field) osk.sync();
     };
     document.addEventListener('pointerdown', down, true);
+    document.addEventListener('click', click, true);
     document.addEventListener('focusin', focusIn);
     document.addEventListener('focusout', focusOut);
     document.addEventListener('selectionchange', selection);
     return () => {
       document.removeEventListener('pointerdown', down, true);
+      document.removeEventListener('click', click, true);
       document.removeEventListener('focusin', focusIn);
       document.removeEventListener('focusout', focusOut);
       document.removeEventListener('selectionchange', selection);

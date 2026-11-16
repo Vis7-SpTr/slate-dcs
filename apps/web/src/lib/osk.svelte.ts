@@ -33,6 +33,18 @@ export function isTextField(el: EventTarget | null): el is Field {
   return textual && !el.readOnly && !el.disabled;
 }
 
+/**
+ * The caret, when the field really has the focus; otherwise the end of the
+ * value. OpenKneeboard (Chromium Embedded, windowless) sends clicks but never
+ * gives the page focus, so a field there has no live caret – typing goes at
+ * the end, like on a notepad.
+ */
+function caret(el: Field): { start: number; end: number } {
+  const live = document.hasFocus() && document.activeElement === el;
+  if (!live || el.selectionStart === null) return { start: el.value.length, end: el.value.length };
+  return { start: el.selectionStart, end: el.selectionEnd ?? el.selectionStart };
+}
+
 class Osk {
   mode: OskMode = $state(loadMode());
   /** The field being typed into; `null` = closed. */
@@ -74,6 +86,7 @@ class Osk {
     this.#inputMode = saved ?? el.getAttribute('inputmode');
     this.layout = fieldLayout(el.dataset['osk'], this.#inputMode ?? '');
     this.suppress(el);
+    el.dataset['oskActive'] = '';
     this.#original = el.value;
     this.abc = false;
     this.field = el;
@@ -84,14 +97,13 @@ class Osk {
   sync(): void {
     const el = this.field;
     if (!el) return;
-    this.before = el.value.slice(0, el.selectionStart ?? el.value.length);
+    this.before = el.value.slice(0, caret(el).start);
   }
 
   type(text: string): void {
     const el = this.field;
     if (!el || text === '') return;
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? start;
+    const { start, end } = caret(el);
     if (!fits(el.value, end - start, el.maxLength)) return;
     el.setRangeText(text, start, end, 'end');
     this.#changed(el);
@@ -100,8 +112,7 @@ class Osk {
   back(): void {
     const el = this.field;
     if (!el) return;
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? start;
+    const { start, end } = caret(el);
     if (start === end && start === 0) return;
     el.setRangeText('', start === end ? start - 1 : start, end, 'end');
     this.#changed(el);
@@ -144,6 +155,7 @@ class Osk {
   }
 
   #release(el: Field): void {
+    delete el.dataset['oskActive'];
     const mode = this.#inputMode;
     delete el.dataset['oskInputmode'];
     if (mode) el.setAttribute('inputmode', mode);
@@ -152,7 +164,7 @@ class Osk {
 
   #changed(el: Field): void {
     el.dispatchEvent(new Event('input', { bubbles: true }));
-    this.before = el.value.slice(0, el.selectionStart ?? el.value.length);
+    this.before = el.value.slice(0, caret(el).start);
   }
 }
 

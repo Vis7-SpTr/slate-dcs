@@ -161,6 +161,14 @@ p {
   flex: 1;
 }
 
+/* The field the on-screen keyboard types into (§11). In OpenKneeboard the
+   page never has focus, so :focus never shows – this marks it instead. */
+[data-osk-active] {
+  border-color: var(--blue);
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
 /* Picks (ui-design.md §11): values picked by click instead of typed – in VR
    OpenKneeboard passes no keyboard. */
 .picks {
